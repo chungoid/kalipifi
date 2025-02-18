@@ -3,12 +3,13 @@ import threading
 import logging
 import yaml
 from pathlib import Path
+
 from tools.tools import Tool
 from utils.helper import generate_default_prefix
 from utils.toolmenus import register_tool
 
+
 class Hcxtool(Tool):
-    # Default command-line options for hcxdumptool
     DEFAULT_OPTIONS = {
         "--disable_deauthentication": False,
         "--disable_proberequest": False,
@@ -35,9 +36,7 @@ class Hcxtool(Tool):
         "--rds": None,
     }
 
-    def __init__(self, config_file: str = "config/hcxtool.yaml"):
-        # Register tool; cli-menu process tracking
-        register_tool(self)
+    def __init__(self, config_file: str = None):
         # Initialize logging
         self.logger = logging.getLogger("hcxtool")
         self.logger.setLevel(logging.DEBUG)
@@ -47,9 +46,22 @@ class Hcxtool(Tool):
         ch.setFormatter(formatter)
         self.logger.addHandler(ch)
 
-        # Load the YAML configuration
+        # Determine the base directory for this tool.
+        base_dir = Path("tools/hcxtools")
+
+        # Resolve the configuration file path.
+        # If no config_file is provided, use the default from the tool's config folder.
+        if config_file is None:
+            config_file = base_dir / "config" / "hcxtool.yaml"
+        else:
+            config_file = Path(config_file)
+            # If provided path is relative, resolve it relative to base_dir.
+            if not config_file.is_absolute():
+                config_file = base_dir / config_file
+
+        # Load the YAML configuration.
         try:
-            with open(config_file, "r") as f:
+            with config_file.open("r") as f:
                 self.config_data = yaml.safe_load(f)
         except Exception as e:
             self.logger.exception(f"Failed to load configuration file {config_file}: {e}")
@@ -58,18 +70,15 @@ class Hcxtool(Tool):
         # Extract interface configuration and scan profiles.
         interfaces_config = self.config_data.get("interfaces", {})
         scans_config = self.config_data.get("scans", {})
-        # Store scans_config back so later we always refer to "scans"
+        # Ensure we consistently refer to scan profiles as "scans"
         self.config_data["scans"] = scans_config
 
-        # For now, default scan settings is an empty dict; it will be replaced when a profile is selected.
+        # Default scan settings (empty dict for now; will be updated when a profile is selected)
         scan_settings = {}
 
-        # Merge default options with any provided in the (currently empty) scan settings.
+        # Merge default options with any provided in scan_settings (currently empty).
         self.options = self.DEFAULT_OPTIONS.copy()
         self.options.update(scan_settings.get("options", {}))
-
-        # Determine base directory.
-        base_dir = Path("tools/hcxtools")
 
         # Initialize the parent Tool class.
         super().__init__(
@@ -79,6 +88,10 @@ class Hcxtool(Tool):
             interfaces=interfaces_config,
             settings=scan_settings
         )
+
+        # Register tool for global process tracking.
+        register_tool(self)
+
         # Save our scan settings for later use.
         self.scan_settings = scan_settings
 
