@@ -1,6 +1,6 @@
 # kalipifi: headless rpi
 
-## Usage:
+## Usage: 
 ```
 usage: kalipifi.py [-h] [--tool {hcxtool}] [--profile PROFILE] [--non-interactive]
 
