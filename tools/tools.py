@@ -1,10 +1,10 @@
 import fcntl
 import os
 import subprocess
-import yaml
 from pathlib import Path
 
 from utils.helper import load_interfaces_config
+
 
 
 class Tool:
@@ -19,7 +19,7 @@ class Tool:
         self.running_processes = {}
 
         # Define standard subdirectories
-        self.config_dir = self.base_dir / "config"
+        self.config_dir = self.base_dir / "configs"
         self.defaults_dir = self.base_dir / "defaults"
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
@@ -46,7 +46,7 @@ class Tool:
         :param filename: optional filename to append
         :return: a pathlib.Path object
         """
-        if category == "config":
+        if category == "configs":
             base = self.config_dir
         elif category == "defaults":
             base = self.defaults_dir
@@ -57,10 +57,15 @@ class Tool:
         return base / filename
 
     def load_interfaces(self):
-        config_file = self.base_dir / "config" / "interfaces.yaml"
-        config_data = load_interfaces_config(config_file)
-        # Assume the YAML file has an 'interfaces' key with subcategories.
-        self.interfaces = config_data.get("interfaces", {})
+        # Build the config file path based on the tool's name.
+        # Here, self.base_dir is the tool's base directory (e.g. tools/hcxtool)
+        config_file = self.base_dir / "configs" / f"{self.name}.yaml"
+        if config_file.exists():
+            config_data = load_interfaces_config(config_file)
+            # Assume that the YAML file has an 'interfaces' key with subcategories.
+            self.interfaces = config_data.get("interfaces", {})
+        else:
+            self.interfaces = {}
 
     def validate_interfaces(self):
         # You can iterate over each interface in each category,

@@ -45,8 +45,8 @@ def select_tool_menu():
         return
 
 def hcxtool_submenu():
-    from tools.hcxtools.hcxtool import Hcxtool
-    tool = Hcxtool(config_file="config/hcxtool.yaml")
+    from tools.hcxtool.hcxtool import Hcxtool
+    tool = Hcxtool(config_file="configs/hcxtool.yaml")
     while True:
         print("\n=== Hcxtool Menu ===")
         print("1: Display and launch scan profiles")

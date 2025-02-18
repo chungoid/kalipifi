@@ -5,7 +5,7 @@ import logging
 import argparse
 
 from config import config
-from tools.hcxtools.hcxtool import Hcxtool
+from tools.hcxtool.hcxtool import Hcxtool
 
 def setup_logging():
     log_file = config.LOG_FILE
