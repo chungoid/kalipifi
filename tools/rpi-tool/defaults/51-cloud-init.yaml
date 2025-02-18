@@ -1,0 +1,15 @@
+network:
+  version: 2
+  wifis:
+    wlan_client:
+      match:
+        macaddress:
+      set-name: wlan3
+      renderer: NetworkManager
+      optional: true
+      dhcp4: true
+      access-points:
+        "Network-Name-Placeholder":
+          auth:
+            key-management:
+            password:

@@ -1,0 +1,83 @@
+interfaces:
+  wlan:
+    - name: wlan0
+      role: hotspot
+      locked: true
+      description: "Interface used as a hotspot"
+    - name: wlan1
+      role: monitor
+      description: "Dedicated monitor interface 1"
+    - name: wlan2
+      role: monitor
+      description: "Dedicated monitor interface 2"
+    - name: wlan3
+      role: client
+      locked: true
+      description: "Client interface (optionally changeable later)"
+
+scans:
+  1:
+    description: "wlan1; aggressive (-A, -F, --gpsd, --bpf, -w)"
+    interface: wlan1
+    output_prefix: default
+    gpsd: true
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "-A": true
+      "-F": true
+
+  2:
+    description: "wlan2; passive (-F --gpsd --bpf --attemptmax=0 -w)"
+    interface: wlan2
+    output_prefix: default
+    gpsd: true
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "--attemptmax": 0
+      "-F": true
+
+  3:
+    description: "wlan1; aggressive (-A -F --rcascan=a --bpf) note: cli output only"
+    interface: wlan1
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "--rcascan": a
+      "-A": true
+      "-F": true
+
+  4:
+    description: "wlan2; passive (-F --rcascan=p --bpf) note: cli output only"
+    interface: wlan2
+    gpsd: true
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "--rcascan": p
+      "-F": true
+
+  5:
+    description: "auto interface; aggressive (-A -F --gpsd --bpf --essidlist -w)"
+    output_prefix: default
+    gpsd: true
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "--essidlist": default
+      "-A": true
+      "-F": true
+
+  6:
+    description: "auto interface; passive (-F --gpsd --bpf --essidlist --attemptmax=0 -w)"
+    output_prefix: default
+    gpsd: true
+    auto_bpf: true
+    bpf_file: default
+    options:
+      "--essidlist": default
+      "--attemptmax": 0
+      "-F": true
+
+

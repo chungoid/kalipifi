@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/70-persistent-net.rules
+# Persistent wireless interface naming for Kali Pi
+# INFO: udevadm info -q property -p /sys/class/net/wlanX
+# NOTE: creates udev rules based on usb port your adapters are attached to
+# USAGE: rtw88 adapters have dynamic mac due to drivers. This causes issues assigning via netplan
+# so we create udev rules to ensure our devices are assigned appropriately before netplan runs on boot.
+
+# Match the Realtek adapter in USB port corresponding to ID_NET_NAME_PATH "wlp1s0u1u2u2" and assign it to wlan1
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_NET_NAME_PATH}=="wlp1s0u1u2u2", NAME="wlan1"
+
+# Match the Realtek adapter in USB port corresponding to ID_NET_NAME_PATH "wlp1s0u1u2u3" and assign it to wlan2
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_NET_NAME_PATH}=="wlp1s0u1u2u3", NAME="wlan2"
+
+# Match the MediaTek adapter by its driver and assign it to wlan3
+SUBSYSTEM=="net", ACTION=="add", ENV{ID_NET_DRIVER}=="mt76x0u", NAME="wlan3"
