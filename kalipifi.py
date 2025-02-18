@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import sys
 import logging
 import argparse
@@ -7,10 +8,14 @@ from config import config
 from tools.hcxtools.hcxtool import Hcxtool
 
 def setup_logging():
+    log_file = config.LOG_FILE
+    log_dir = os.path.dirname(log_file)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s',
-        filename=config.LOG_FILE,
+        filename=log_file,
         filemode='a'  # Append mode
     )
 
