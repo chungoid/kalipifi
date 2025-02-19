@@ -1,3 +1,5 @@
+import logging
+
 global_tools = {}
 
 def register_tool(tool_instance):
@@ -80,6 +82,8 @@ def run_hcxtool_scan_menu(tool):
     if not choice.isdigit():
         print("Invalid selection, please enter a numeric profile key.")
         return
+    logging.debug(
+        f"Selected scan profile {choice} -- Key: {scans[int(choice)]} Description: {scans[int(choice)]['description']}")
     selected_profile = int(choice)
     if selected_profile not in scans:
         print("Invalid profile selection.")

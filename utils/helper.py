@@ -89,7 +89,7 @@ def check_client_macs(interfaces: List[str]) -> List[str]:
 def create_bpf_filter(
         scan_interface: str,
         filter_path: Path,
-        prefilter_path: Path,
+        prefilter_path: Path,  # This may become unused if we pass filter_expr directly.
         interfaces: List[str],
         extra_macs: Optional[List[str]] = None
 ) -> bool:
@@ -97,10 +97,12 @@ def create_bpf_filter(
     Generate a BPF filter that excludes packets from all interfaces except the scanning interface.
     Also includes MAC addresses of clients on non-scanning interfaces and any additional MAC addresses.
 
+    The filter expression is passed directly to hcxdumptool for compilation.
+
     Parameters:
         scan_interface (str): The interface being used for scanning.
         filter_path (Path): Path to write the compiled BPF filter.
-        prefilter_path (Path): Path to write the non-compiled BPF filter.
+        prefilter_path (Path): Unused now; kept for backward compatibility.
         interfaces (List[str]): List of all wireless interface names.
         extra_macs (Optional[List[str]]): Additional MAC addresses to exclude.
 
@@ -124,7 +126,7 @@ def create_bpf_filter(
         logging.debug(f"Found client MACs: {client_macs}")
         macs.extend(client_macs)
 
-    # Include extra MAC addresses, if provided.
+    # Include any additional MAC addresses.
     if extra_macs:
         logging.debug(f"Found extra MACs: {extra_macs}")
         macs.extend(extra_macs)
@@ -134,10 +136,13 @@ def create_bpf_filter(
             "No MAC addresses found; aborting BPF filter generation to avoid interfering with own connections.")
         return False
 
-    # Build filter expression by grouping MAC clauses with "or" and wrapping with a single "not".
+    # Build filter expression using grouped OR inside a NOT.
     clauses = [f"wlan addr2 {mac}" for mac in macs]
     filter_expr = "not (" + " or ".join(clauses) + ")"
 
+    logging.debug(f"Generated BPF filter expression: {filter_expr}")
+
+    # Optionally, you can still write the filter expression to a prefilter file for logging.
     try:
         with prefilter_path.open("w") as f:
             f.write(filter_expr)
@@ -156,9 +161,9 @@ def create_bpf_filter(
             logging.error(f"Error backing up existing filter file: {e}")
             return False
 
-    # Compile the filter using hcxdumptool.
+    # Now pass the filter expression directly to hcxdumptool.
     try:
-        cmd = f"hcxdumptool --bpfc={prefilter_path} > {filter_path}"
+        cmd = f'hcxdumptool --bpfc="{filter_expr}" > {filter_path}'
         if run_command(cmd) is None:
             logging.error("hcxdumptool failed to compile the BPF filter")
             return False

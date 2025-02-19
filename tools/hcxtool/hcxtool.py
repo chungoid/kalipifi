@@ -120,14 +120,11 @@ class Hcxtool(Tool):
                 return iface.get("name")
         raise ValueError("No interface defined in scan profile and no monitor interface found in configuration.")
 
-
     def build_command(self) -> list:
         cmd = ["hcxdumptool"]
 
-        # Use the scan profile's interface if provided.
+        # Use the scan profile's interface (determined by get_scan_interface())
         scan_interface = self.get_scan_interface()
-
-        # Use the selected interface in the command.
         cmd.extend(["-i", scan_interface])
 
         # Process output prefix and corresponding pcap file.
@@ -135,11 +132,15 @@ class Hcxtool(Tool):
         if output_prefix_val in (None, "", "none"):
             self.logger.info("No output_prefix defined in configuration.")
         elif output_prefix_val == "default":
-            default_prefix = Path(generate_default_prefix())
+            # Generate a default prefix and place it in the results folder.
+            default_prefix = self.results_dir / generate_default_prefix()
             self.scan_settings["output_prefix"] = default_prefix
             cmd.extend(["-w", str(default_prefix.with_suffix('.pcapng'))])
         else:
+            # Ensure output_prefix is a Path and interpret it as relative to results_dir if it's not absolute.
             output_prefix = output_prefix_val if isinstance(output_prefix_val, Path) else Path(output_prefix_val)
+            if not output_prefix.is_absolute():
+                output_prefix = self.results_dir / output_prefix
             cmd.extend(["-w", str(output_prefix.with_suffix('.pcapng'))])
 
         # Add GPS mode if enabled.
@@ -162,7 +163,7 @@ class Hcxtool(Tool):
                     channel_str = ",".join(channel_str.split())
             cmd.extend(["-c", channel_str])
 
-        # Handle BPF file.
+        # Handle BPF file: use default from defaults_dir if bpf_file is set to "default"
         bpf_setting = self.scan_settings.get("bpf_file", "default")
         if bpf_setting in (None, "", "none"):
             self.logger.info("No BPF filter will be applied as per configuration.")
@@ -187,6 +188,7 @@ class Hcxtool(Tool):
         self.logger.debug("Built command: " + " ".join(cmd))
         return cmd
 
+
     def run(self, profile=None) -> None:
         """
         Asynchronously run the hcxdumptool scan based on a selected scan profile from the YAML configuration.
@@ -209,10 +211,14 @@ class Hcxtool(Tool):
         else:
             self.logger.warning("No scan profiles defined under 'scans'. Falling back to single scan configuration.")
 
-        # Determine which interface to use from the scan definition.
-        scan_interface = self.get_scan_interface()
+        # Determine the scan interface using the helper; update scan_settings if missing.
+        try:
+            scan_interface = self.get_scan_interface()
+            self.scan_settings["interface"] = scan_interface
+        except ValueError as e:
+            self.logger.error(e)
+            return
 
-        # Reserve the selected interface.
         if not self.reserve_interface(scan_interface):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
@@ -235,8 +241,12 @@ class Hcxtool(Tool):
         try:
             cmd = self.build_command()
             self.logger.info("Executing command: " + " ".join(cmd))
-            process = run_command_with_root(cmd, prompt=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
+            process = run_command_with_root(
+                cmd, prompt=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
             # Store the process in a dictionary keyed by profile.
             if not hasattr(self, "running_processes"):
                 self.running_processes = {}
