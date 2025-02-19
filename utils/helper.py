@@ -40,7 +40,8 @@ def generate_default_prefix() -> str:
 
 def get_mac_address(interface: str) -> Optional[str]:
     """
-    Retrieve the MAC address of a given interface using 'ip link show'.
+    Retrieve the MAC address of a given interface by reading from sysfs.
+    This is generally more stable than parsing ip output.
 
     Parameters:
         interface (str): The name of the interface.
@@ -49,13 +50,12 @@ def get_mac_address(interface: str) -> Optional[str]:
         Optional[str]: The MAC address if found; otherwise, None.
     """
     try:
-        result = subprocess.check_output(["ip", "link", "show", interface], text=True)
-        for line in result.splitlines():
-            if "link/ether" in line:
-                return line.split()[1]
-    except subprocess.CalledProcessError:
+        with open(f"/sys/class/net/{interface}/address", "r") as f:
+            mac = f.read().strip()
+            return mac
+    except Exception as e:
+        logging.warning(f"Could not read MAC address from /sys/class/net/{interface}/address: {e}")
         return None
-    return None
 
 
 def check_client_macs(interfaces: List[str]) -> List[str]:
@@ -129,11 +129,14 @@ def create_bpf_filter(
         logging.debug(f"Found extra MACs: {extra_macs}")
         macs.extend(extra_macs)
 
-    # Build the filter expression.
-    filter_expr = " and ".join([f"not wlan addr2 {mac}" for mac in macs]) if macs else ""
-    if not filter_expr:
-        logging.warning("No BPF filter generated; aborting scan to avoid interfering with own connections.")
+    if not macs:
+        logging.warning(
+            "No MAC addresses found; aborting BPF filter generation to avoid interfering with own connections.")
         return False
+
+    # Build filter expression by grouping MAC clauses with "or" and wrapping with a single "not".
+    clauses = [f"wlan addr2 {mac}" for mac in macs]
+    filter_expr = "not (" + " or ".join(clauses) + ")"
 
     try:
         with prefilter_path.open("w") as f:
