@@ -2,8 +2,6 @@ import os
 import sys
 import subprocess
 import logging
-
-import prompt
 import yaml
 from datetime import datetime
 from pathlib import Path

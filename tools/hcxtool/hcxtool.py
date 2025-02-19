@@ -3,7 +3,6 @@ import threading
 import logging
 import requests
 import yaml
-import os
 import subprocess
 from pathlib import Path
 
@@ -195,21 +194,21 @@ class Hcxtool(Tool):
             try:
                 cmd = self.build_command()
                 import os, subprocess
-                # If not root, prompt and run 'sudo -v' to cache credentials.
                 if os.geteuid() != 0:
                     answer = input(
                         "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
                     if answer != "y":
                         self.logger.error("User declined to run command with sudo. Aborting scan.")
                         return
-                    subprocess.run(["sudo", "-v"])  # cache credentials
-                    # Use 'sudo -E' to preserve your environment.
+                    # Prompt for the sudo password in the current interactive shell.
+                    subprocess.run(["sudo", "-v"], check=True)
+                    # Prepend 'sudo -E' to preserve your environment.
                     cmd = ["sudo", "-E"] + cmd
 
                 session_name = f"{self.name}_scan_{profile}"
                 full_cmd = " ".join(cmd)
-                # Launch a new detached tmux session that runs the full command.
-                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, full_cmd])
+                # Launch a new detached tmux session running the full command.
+                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, full_cmd], check=True)
                 self.logger.info(f"Started scan in new tmux session '{session_name}' for profile {profile}.")
                 self.running_processes[profile] = session_name
                 return
