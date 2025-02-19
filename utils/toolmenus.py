@@ -6,9 +6,10 @@ import re
 
 # Set up a basic logger for the menu module.
 global_tools = {}
+logger = logging.getLogger(__name__)
 
 def setup_logging():
-    logger = logging.getLogger()  # root logger
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
