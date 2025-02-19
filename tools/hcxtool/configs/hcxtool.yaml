@@ -1,3 +1,6 @@
+user:
+  wpasec-key:
+
 interfaces:
   wlan:
     - name: wlan0
@@ -35,7 +38,7 @@ scans:
     auto_bpf: true
     bpf_file: default
     options:
-      "--attemptmax": 0
+      "--attemptapmax": 0
       "-F": true
 
   3:

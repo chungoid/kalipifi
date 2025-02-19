@@ -1,9 +1,15 @@
+import base64
 import subprocess
 import threading
 import logging
+import requests
 import yaml
 from pathlib import Path
 
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from tools.tools import Tool
 from utils.helper import generate_default_prefix, run_command_with_root
@@ -261,7 +267,6 @@ class Hcxtool(Tool):
             self.logger.exception(f"Exception occurred during hcxtool execution: {e}")
             self.release_interfaces()
 
-
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
         Monitor a running process in a separate thread.
@@ -292,4 +297,119 @@ class Hcxtool(Tool):
                 self.logger.info(f"Scan for profile {profile} already completed.")
         else:
             self.logger.warning(f"No running scan found for profile {profile}.")
+
+    def upload_selected_pcapng(self) -> None:
+        """
+        Lists available .pcapng files for selection and uploads the chosen file.
+        The user can either choose a file by number or type "all" to bulk-upload.
+        """
+        results_dir = self.get_path("results")
+        files = self.list_pcapng_files(results_dir)
+        if not files:
+            self.logger.error("No PCAPNG files found in the results directory.")
+            print("No PCAPNG files found.")
+            return
+
+        print("Available PCAPNG files:")
+        for idx, file in enumerate(files, start=1):
+            print(f"{idx}: {file.name}")
+        print("Type 'all' to upload all files.")
+
+        choice = input("Select a file to upload (number or 'all'): ").strip().lower()
+        if choice == "all":
+            for file in files:
+                self.logger.info(f"Uploading {file.name}...")
+                success = self.upload_to_wpasec(file)
+                if success:
+                    print(f"Uploaded {file.name} successfully.")
+                else:
+                    print(f"Failed to upload {file.name}.")
+        elif choice.isdigit():
+            index = int(choice) - 1
+            if index < 0 or index >= len(files):
+                print("Invalid selection.")
+                return
+            selected_file = files[index]
+            success = self.upload_to_wpasec(selected_file)
+            if success:
+                print(f"Uploaded {selected_file.name} successfully.")
+            else:
+                print(f"Failed to upload {selected_file.name}.")
+        else:
+            print("Invalid selection. Please enter a number or 'all'.")
+
+    def upload_to_wpasec(self, pcap_path: Path) -> bool:
+        """
+        Upload the pcapng file to WPA-sec using the API key from the YAML configuration.
+        The API key is stored encrypted and is decrypted at runtime.
+
+        Parameters:
+            pcap_path (Path): Path to the pcapng file to upload.
+
+        Returns:
+            bool: True if the upload was successful, False otherwise.
+        """
+        try:
+            # Retrieve and decrypt the API key using the static method.
+            api_key = Hcxtool.get_decrypted_api_key(self.config_data)
+        except Exception as e:
+            self.logger.error(f"Error decrypting API key: {e}")
+            return False
+
+        # Replace with the actual WPA-sec endpoint.
+        url = "https://api.wpa-sec.org/upload"
+        try:
+            with pcap_path.open("rb") as f:
+                files = {"file": f}
+                data = {"api_key": api_key}
+                response = requests.post(url, files=files, data=data)
+            if response.status_code == 200:
+                self.logger.info("PCAPNG file uploaded successfully.")
+                return True
+            else:
+                self.logger.error(f"Upload failed with status {response.status_code}: {response.text}")
+        except Exception as e:
+            self.logger.exception(f"Exception occurred during upload: {e}")
+        return False
+
+    @staticmethod
+    def list_pcapng_files(results_dir: Path) -> list:
+        """
+        Return a sorted list of all .pcapng files in the results directory.
+        """
+        return sorted(results_dir.glob("*.pcapng"))
+
+    @staticmethod
+    def derive_key_from_passphrase(passphrase: str, salt: bytes) -> bytes:
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
+        return key
+
+    @staticmethod
+    def get_decrypted_api_key(config_data: dict) -> str:
+        user_cfg = config_data.get("user", {})
+        encrypted_key = user_cfg.get("wpasec-key")
+        salt_b64 = user_cfg.get("salt")
+        if not encrypted_key or not salt_b64:
+            raise ValueError("Encrypted API key or salt not found in configuration.")
+        salt = base64.urlsafe_b64decode(salt_b64.encode())
+
+        passphrase = input("Enter passphrase to decrypt WPA-sec API key: ")
+        # Correctly reference the static method.
+        derived_key = Hcxtool.derive_key_from_passphrase(passphrase, salt)
+        cipher_suite = Fernet(derived_key)
+        try:
+            decrypted_key = cipher_suite.decrypt(encrypted_key.encode()).decode()
+            return decrypted_key
+        except Exception as e:
+            raise ValueError("Failed to decrypt API key. Check your passphrase.") from e
+
+
+
 

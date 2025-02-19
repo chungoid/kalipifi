@@ -46,27 +46,49 @@ def select_tool_menu():
         print("Invalid option.")
         return
 
+############ HCXTOOL MENU FUNCTIONS ############
 def hcxtool_submenu():
     from tools.hcxtool.hcxtool import Hcxtool
     tool = Hcxtool(config_file="configs/hcxtool.yaml")
     while True:
         print("\n=== Hcxtool Menu ===")
-        print("1: Display and launch scan profiles")
-        print("2: List active scans")
-        print("3: Stop a running scan")
+        print("1: Select Scan: Start")
+        print("2: Select Scan: Stop ")
+        print("3: List All Running Scans")
+        print("4: Upload to WPA-Sec")
         print("0: Return to Tools Menu")
         choice = input("Select an option: ").strip()
 
         if choice == "1":
             run_hcxtool_scan_menu(tool)
         elif choice == "2":
-            list_running_scans(tool)
-        elif choice == "3":
             stop_running_scan(tool)
+        elif choice == "3":
+            list_running_scans(tool)
+        elif choice == "4":
+            upload_wpasec_menu(tool)
         elif choice == "0":
             break
         else:
             print("Invalid option.")
+
+def upload_wpasec_menu(tool):
+    """
+    Presents an upload menu for WPA-sec. The user can choose to upload a single PCAPNG file or all files.
+    """
+    print("\n=== WPA-sec Upload Menu ===")
+    print("1: Upload a single PCAPNG file")
+    print("2: Upload all PCAPNG files")
+    print("0: Return to Hcxtool Menu")
+    choice = input("Select an option: ").strip().lower()
+    if choice == "0":
+        return
+    elif choice == "1":
+        tool.upload_selected_pcapng()
+    elif choice == "2":
+        tool.bulk_upload_pcapng()
+    else:
+        print("Invalid selection.")
 
 def run_hcxtool_scan_menu(tool):
     scans = tool.config_data.get("scans", {})
@@ -110,6 +132,7 @@ def stop_running_scan(tool):
         return
     profile = int(choice)
     tool.stop(profile)
+
 
 if __name__ == "__main__":
     display_main_menu()
