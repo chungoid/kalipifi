@@ -26,7 +26,6 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: false
     options:
       "-A": true
       "-F": true
@@ -38,7 +37,6 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: false
     options:
       "--attemptapmax": 0
       "-F": true
@@ -48,7 +46,6 @@ scans:
     interface: wlan1
     auto_bpf: true
     bpf_file: default
-    tmux: false
     options:
       "--rcascan": a
       "-A": true
@@ -60,7 +57,6 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: true
     options:
       "--rcascan": p
       "-F": true
@@ -71,7 +67,6 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: true
     options:
       "--essidlist": default
       "-A": true
@@ -83,7 +78,6 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: true
     options:
       "--essidlist": default
       "--attemptmax": 0

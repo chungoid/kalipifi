@@ -4,19 +4,22 @@ import sys
 import time
 import re
 
-# Set up a basic logger for the menu module.
+# Global dictionary for registered tools.
 global_tools = {}
+
+# Module-level logger.
 logger = logging.getLogger(__name__)
+logger.propagate = True
 
 def setup_logging():
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    root_logger = logging.getLogger()  # Get the root logger.
+    root_logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
     ch.addFilter(EscapeSequenceFilter())
-    logger.addHandler(ch)
+    root_logger.addHandler(ch)
 
 def flush_stdin(timeout=0.1):
     """Flush any pending input from stdin."""
@@ -42,9 +45,7 @@ def list_all_active_processes():
             print(f"Tool: {tool_name} has no active processes.")
 
 def display_main_menu():
-    time.sleep(0.1)
-    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-        sys.stdin.read(1)
+    flush_stdin()
     while True:
         print("\n=== Main Menu ===")
         print("1: Select a tool")
@@ -88,15 +89,14 @@ def hcxtool_submenu():
         print("Failed to launch Hcxtool. Check logs for details.")
         return
 
-    # For convenience, cache the scan profiles
+    # Cache the scan profiles for convenience.
     scans = tool.config_data.get("scans", {})
 
     while True:
         print("\n=== Hcxtool Menu ===")
         print("1: Launch scan")
-        print("2: View scan (attach to tmux session)")
-        print("3: Stop a running scan")
-        print("4: Upload results to WPA-sec")
+        print("2: Stop a running scan")
+        print("3: Upload results to WPA-sec")
         print("0: Return to Main Menu")
         choice = input("Select an option: ").strip()
         if choice == "0":
@@ -125,24 +125,26 @@ def hcxtool_submenu():
             else:
                 print("No scan profiles defined in the configuration.")
         elif choice == "2":
-            session = input("Enter the tmux session name to attach (or press enter for default): ").strip()
-            if not session:
-                session_num = input("Enter scan profile number to view: ").strip()
-                session = f"{tool.name}_scan_{session_num}"
-            try:
-                tool.attach_tmux_session(session)
-            except Exception as ex:
-                logger.exception("Error attaching to tmux session %s: %s", session, ex)
-        elif choice == "3":
-            profile = input("Enter scan profile number to stop: ").strip()
-            if profile.isdigit():
-                try:
-                    tool.stop(int(profile))
-                except Exception as ex:
-                    logger.exception("Error stopping scan for profile %s: %s", profile, ex)
+            if tool.running_processes:
+                print("\n=== Running Scans ===")
+                for profile, proc in tool.running_processes.items():
+                    try:
+                        status = "Running" if proc.poll() is None else "Completed"
+                    except Exception as ex:
+                        status = f"Error: {ex}"
+                    print(f"Profile {profile}: {status}")
+                selection = input("Enter the scan profile number to stop: ").strip()
+                if selection.isdigit():
+                    try:
+                        tool.stop(int(selection))
+                        print(f"Scan profile {selection} has been stopped.")
+                    except Exception as ex:
+                        logger.exception("Error stopping scan for profile %s: %s", selection, ex)
+                else:
+                    print("Invalid profile selection.")
             else:
-                print("Invalid profile.")
-        elif choice == "4":
+                print("No running scans.")
+        elif choice == "3":
             try:
                 upload_wpasec_menu(tool)
             except Exception as ex:
@@ -176,11 +178,18 @@ def upload_wpasec_menu(tool) -> None:
         print("Invalid selection.")
         logger.debug("upload_wpasec_menu invalid option: %s", choice)
 
+def cleanup_all_tools():
+    for tool in global_tools.values():
+        try:
+            tool.cleanup()
+        except Exception as e:
+            logger.exception("Error cleaning up tool %s: %s", tool.name, e)
+
 
 class EscapeSequenceFilter(logging.Filter):
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
     def filter(self, record):
-        # Remove escape sequences from the message
+        # Remove ANSI escape sequences from the message.
         record.msg = self.ansi_escape.sub('', record.msg)
         return True

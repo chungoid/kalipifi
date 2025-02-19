@@ -1,5 +1,4 @@
 import os
-import sys
 import subprocess
 import logging
 import yaml
@@ -8,16 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
-
-
-def ensure_tmux_session():
-    if "TMUX" not in os.environ:
-        # Create a new tmux session and re-run this script.
-        session_name = "kalipifi"
-        # '-d' creates the session detached, then we attach.
-        subprocess.check_call(["tmux", "new-session", "-d", "-s", session_name, "python3", sys.argv[0]])
-        os.system(f"tmux attach-session -t {session_name}")
-        sys.exit(0)
+logger.propagate = True
 
 
 def run_command(command: str) -> Optional[str]:

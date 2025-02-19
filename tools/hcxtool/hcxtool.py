@@ -4,7 +4,6 @@ import logging
 import requests
 import yaml
 import subprocess
-import os
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -190,34 +189,6 @@ class Hcxtool(Tool):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
 
-        # --- Tmux Mode Branch: Launch scan in a new detached tmux session ---
-        if self.scan_settings.get("tmux", False):
-            try:
-                cmd = self.build_command()
-                if os.geteuid() != 0:
-                    answer = input(
-                        "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
-                    if answer != "y":
-                        self.logger.error("User declined to run command with sudo. Aborting scan.")
-                        return
-                    # Prompt for the sudo password in the current interactive shell.
-                    subprocess.run(["sudo", "-v"], check=True)
-                    # Prepend 'sudo -E' to preserve your environment.
-                    cmd = ["sudo", "-E"] + cmd
-
-                session_name = f"{self.name}_scan_{profile}"
-                full_cmd = " ".join(cmd)
-                # Launch a new detached tmux session running the full command.
-                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, "bash", "-c", full_cmd], check=True)
-                self.logger.info(f"Started scan in new tmux session '{session_name}' for profile {profile}.")
-                self.running_processes[profile] = session_name
-                return
-            except Exception as e:
-                self.logger.exception(f"Exception while launching tmux session: {e}")
-                self.release_interfaces()
-                return
-
-        # --- Non-Tmux Mode Branch ---
         if self.scan_settings.get("auto_bpf", False):
             wlan_list = self.interfaces.get("wlan", [])
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]
@@ -244,7 +215,7 @@ class Hcxtool(Tool):
             monitor_thread.start()
             self.logger.info(f"Started scan for profile {profile}.")
         except Exception as e:
-            self.logger.exception(f"Exception occurred during hcxtool execution: {e}")
+            self.logger.exception(f"Exception occurred during hcxdumptool execution: {e}")
             self.release_interfaces()
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:

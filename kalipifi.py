@@ -6,8 +6,7 @@ import argparse
 
 from config.config import LOG_FILE
 from tools.hcxtool.hcxtool import Hcxtool
-from utils.helper import ensure_tmux_session
-from utils.toolmenus import display_main_menu, EscapeSequenceFilter
+from utils.toolmenus import display_main_menu, EscapeSequenceFilter, cleanup_all_tools
 
 
 def setup_logging():
@@ -67,6 +66,9 @@ def main():
         else:
             logging.error(f"Tool '{args.tool}' not recognized.")
             sys.exit(1)
+
+        # stop tool processes & release locked interfaces
+        cleanup_all_tools()
 
 
 if __name__ == "__main__":
