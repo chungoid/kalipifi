@@ -1,7 +1,4 @@
-"""
-Helper module for common utility functions used in hcxtool.
-"""
-
+import os
 import subprocess
 import logging
 import yaml
@@ -182,3 +179,28 @@ def load_interfaces_config(config_file: Path) -> Dict[str, Any]:
     """
     with config_file.open("r") as f:
         return yaml.safe_load(f)
+
+
+def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> subprocess.Popen:
+    """
+    Runs the given command, ensuring it runs with root privileges.
+    If not running as root and prompt is True, prompts the user whether to re-run the command via sudo.
+
+    Parameters:
+        cmd (list): The command to run (as a list of arguments).
+        prompt (bool): Whether to prompt the user before prepending 'sudo'.
+        **kwargs: Additional keyword arguments passed to subprocess.Popen.
+
+    Returns:
+        subprocess.Popen: The process handle.
+
+    Raises:
+        PermissionError: If the user declines to run with sudo.
+    """
+    if os.geteuid() != 0:
+        if prompt:
+            answer = input("This tool requires root privileges. Run command with sudo? (y/n): ").strip().lower()
+            if answer != "y":
+                raise PermissionError("Tool requires root privileges. Aborting command.")
+        cmd = ["sudo"] + cmd
+    return subprocess.Popen(cmd, **kwargs)

@@ -6,7 +6,6 @@ from pathlib import Path
 from utils.helper import load_interfaces_config
 
 
-
 class Tool:
     def __init__(self, name, description, base_dir, interfaces=None, settings=None):
         self.name = name
@@ -24,6 +23,8 @@ class Tool:
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
 
+        # Defaults true, non-root tools set to false.
+        require_root = True
 
     @staticmethod
     def _interface_exists(iface):
@@ -32,6 +33,10 @@ class Tool:
             return iface in output
         except subprocess.CalledProcessError:
             return False
+
+    def check_root(self):
+        if os.geteuid() != 0:
+            raise PermissionError("This tool must be run as root.")
 
     def setup_directories(self):
         # Create directories if they do not exist.
@@ -99,6 +104,7 @@ class Tool:
     def run(self):
         # Placeholder for common run logic.
         # Subclasses should override this with their specific behavior.
+        self.check_root()
         raise NotImplementedError
 
     def cleanup(self):

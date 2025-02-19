@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 from tools.tools import Tool
-from utils.helper import generate_default_prefix
+from utils.helper import generate_default_prefix, run_command_with_root
 from utils.toolmenus import register_tool
 
 
@@ -103,11 +103,18 @@ class Hcxtool(Tool):
         cmd = ["hcxdumptool"]
 
         # Determine the interface (default: first WLAN interface)
-        wlan_interfaces = self.interfaces.get("wlan", [])
+        #wlan_interfaces = self.interfaces.get("wlan", [])
+        #if not wlan_interfaces:
+        #   self.logger.error("No WLAN interfaces defined in configuration.")
+        #    raise ValueError("No WLAN interfaces defined.")
+        #iface = wlan_interfaces[0].get("name")
+        #cmd.extend(["-i", iface])
+
+        wlan_interfaces = self.interfaces.get("wlan_interfaces", {})
         if not wlan_interfaces:
             self.logger.error("No WLAN interfaces defined in configuration.")
-            raise ValueError("No WLAN interfaces defined.")
-        iface = wlan_interfaces[0].get("name")
+            raise ValueError("No WLAN interfaces defined in configuration.")
+        iface = self.scan_settings.get("interface", {})
         cmd.extend(["-i", iface])
 
         # Process output prefix and corresponding pcap file.
@@ -228,7 +235,7 @@ class Hcxtool(Tool):
         try:
             cmd = self.build_command()
             self.logger.info("Executing command: " + " ".join(cmd))
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            process = run_command_with_root(cmd, prompt=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
             # Store the process in a dictionary keyed by profile.
             if not hasattr(self, "running_processes"):
