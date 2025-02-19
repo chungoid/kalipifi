@@ -7,7 +7,6 @@ import libtmux
 
 from utils.helper import load_interfaces_config
 
-
 class Tool:
     def __init__(self, name, description, base_dir, interfaces=None, settings=None):
         self.name = name
@@ -25,7 +24,6 @@ class Tool:
         self.defaults_dir = self.base_dir / "defaults"
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
-        self.check_root()
 
         # Defaults true, non-root tools set to false.
         require_root = True
@@ -172,3 +170,4 @@ class InterfaceLock:
                 os.remove(self.lock_file)
             except Exception as e:
                 print(f"Error releasing lock for {self.iface}: {e}")
+

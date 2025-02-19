@@ -4,21 +4,31 @@ import sys
 import logging
 import argparse
 
-from config import config
+from config.config import LOG_FILE
 from tools.hcxtool.hcxtool import Hcxtool
 from utils.helper import ensure_tmux_session
+from utils.toolmenus import display_main_menu, EscapeSequenceFilter
+
 
 def setup_logging():
-    log_file = config.LOG_FILE
-    log_dir = os.path.dirname(log_file)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        filename=log_file,
-        filemode='a'  # Append mode
-    )
+    # Configure the root logger so that all logging calls use the same configuration.
+    logger = logging.getLogger()  # root logger
+    logger.setLevel(logging.DEBUG)
+
+    # Stream handler with ANSI escape sequence filtering.
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    ch.addFilter(EscapeSequenceFilter())
+    logger.addHandler(ch)
+
+    # Add a FileHandler to log messages to the file specified in config.py.
+    fh = logging.FileHandler(LOG_FILE)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="kali-pi tools main script")
@@ -30,31 +40,38 @@ def parse_args():
                         help="Run in non-interactive mode using provided options")
     return parser.parse_args()
 
+
 def main():
+    # Ensure we run inside a tmux session if desired.
     ensure_tmux_session()
-    args = parse_args()
+
+    # Set up logging (root logger)
     setup_logging()
     logging.info("Starting kali-pi tools")
 
-    # By default, run in interactive mode.
+    args = parse_args()
+
     if not args.non_interactive:
         try:
-            from utils.toolmenus import display_main_menu
             display_main_menu()
-        except ImportError:
-            logging.error("Interactive menu not available.")
+        except Exception as e:
+            logging.exception("Fatal error in interactive menu: %s", e)
             sys.exit(1)
     else:
-        # Non-interactive mode: require --tool to be specified.
         if not args.tool:
             logging.error("In non-interactive mode, you must specify a tool using --tool")
             sys.exit(1)
         if args.tool == "hcxtool":
-            tool = Hcxtool(config_file="config/hcxtool.yaml")
-            tool.run(profile=args.profile)
+            try:
+                tool = Hcxtool(config_file="configs/hcxtool.yaml")
+                tool.run(profile=args.profile)
+            except Exception as e:
+                logging.exception("Error running hcxtool: %s", e)
+                sys.exit(1)
         else:
             logging.error(f"Tool '{args.tool}' not recognized.")
             sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

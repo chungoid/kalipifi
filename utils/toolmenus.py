@@ -2,9 +2,26 @@ import logging
 import select
 import sys
 import time
+import re
 
-
+# Set up a basic logger for the menu module.
 global_tools = {}
+
+def setup_logging():
+    logger = logging.getLogger()  # root logger
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    ch.addFilter(EscapeSequenceFilter())
+    logger.addHandler(ch)
+
+def flush_stdin(timeout=0.1):
+    """Flush any pending input from stdin."""
+    time.sleep(timeout)
+    while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        sys.stdin.read(1)
 
 def register_tool(tool_instance):
     global_tools[tool_instance.name] = tool_instance
@@ -15,13 +32,15 @@ def list_all_active_processes():
         if hasattr(tool_instance, "running_processes") and tool_instance.running_processes:
             print(f"Tool: {tool_name}")
             for profile, process in tool_instance.running_processes.items():
-                status = "Running" if process.poll() is None else "Completed"
+                try:
+                    status = "Running" if process.poll() is None else "Completed"
+                except Exception as ex:
+                    status = f"Error checking status: {ex}"
                 print(f"  Profile {profile}: {status}")
         else:
             print(f"Tool: {tool_name} has no active processes.")
 
 def display_main_menu():
-    import time, select, sys
     time.sleep(0.1)
     if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
         sys.stdin.read(1)
@@ -44,15 +63,31 @@ def select_tool_menu():
     print("0: Return to Main Menu")
     choice = input("Select a tool: ").strip()
     if choice == "1":
-        hcxtool_submenu()
+        try:
+            hcxtool_submenu()
+        except Exception as ex:
+            logger.exception("Error in Hcxtool submenu: %s", ex)
     elif choice == "0":
         return
     else:
         print("Invalid option.")
+        logger.debug("select_tool_menu invalid option: %s", choice)
 
 def hcxtool_submenu():
-    from tools.hcxtool.hcxtool import Hcxtool
-    tool = Hcxtool(config_file="configs/hcxtool.yaml")
+    try:
+        from tools.hcxtool.hcxtool import Hcxtool
+    except Exception as ex:
+        logger.exception("Error importing Hcxtool: %s", ex)
+        return
+
+    try:
+        tool = Hcxtool(config_file="configs/hcxtool.yaml")
+    except Exception as ex:
+        logger.exception("Error instantiating Hcxtool: %s", ex)
+        print("Failed to launch Hcxtool. Check logs for details.")
+        return
+
+    # For convenience, cache the scan profiles
     scans = tool.config_data.get("scans", {})
 
     while True:
@@ -66,10 +101,7 @@ def hcxtool_submenu():
         if choice == "0":
             break
         elif choice == "1":
-            # Display available scan profiles with keys and descriptions
-            if not scans:
-                print("No scan profiles defined in the configuration.")
-            else:
+            if scans:
                 print("\n=== Hcxtool Scan Profiles ===")
                 for key, profile in scans.items():
                     desc = profile.get("description", "No description")
@@ -83,24 +115,40 @@ def hcxtool_submenu():
                     print("Invalid profile selection.")
                     continue
                 print(f"Launching scan profile: {selected_profile} ({scans[selected_profile].get('description')})")
-                tool.run(profile=selected_profile)
-                print(f"Scan profile {selected_profile} launched asynchronously.")
+                try:
+                    tool.run(profile=selected_profile)
+                    print(f"Scan profile {selected_profile} launched asynchronously.")
+                except Exception as ex:
+                    logger.exception("Error launching scan for profile %s: %s", selected_profile, ex)
+                    print("Error launching scan. See logs for details.")
+            else:
+                print("No scan profiles defined in the configuration.")
         elif choice == "2":
             session = input("Enter the tmux session name to attach (or press enter for default): ").strip()
             if not session:
-                session = f"{tool.name}_scan_{input('Enter scan profile number to view: ').strip()}"
-            tool.attach_tmux_session(session)
+                session_num = input("Enter scan profile number to view: ").strip()
+                session = f"{tool.name}_scan_{session_num}"
+            try:
+                tool.attach_tmux_session(session)
+            except Exception as ex:
+                logger.exception("Error attaching to tmux session %s: %s", session, ex)
         elif choice == "3":
             profile = input("Enter scan profile number to stop: ").strip()
             if profile.isdigit():
-                profile = int(profile)
-                tool.stop(profile)
+                try:
+                    tool.stop(int(profile))
+                except Exception as ex:
+                    logger.exception("Error stopping scan for profile %s: %s", profile, ex)
             else:
                 print("Invalid profile.")
         elif choice == "4":
-            upload_wpasec_menu(tool)
+            try:
+                upload_wpasec_menu(tool)
+            except Exception as ex:
+                logger.exception("Error in upload menu: %s", ex)
         else:
             print("Invalid option. Please try again.")
+            logger.debug("Hcxtool submenu invalid option: %s", choice)
 
 def upload_wpasec_menu(tool) -> None:
     """
@@ -114,30 +162,24 @@ def upload_wpasec_menu(tool) -> None:
     if choice == "0":
         return
     elif choice == "1":
-        tool.upload_selected_pcapng()
+        try:
+            tool.upload_selected_pcapng()
+        except Exception as ex:
+            logger.exception("Error during single file upload: %s", ex)
     elif choice == "2":
-        tool.bulk_upload_pcapng()
+        try:
+            tool.bulk_upload_pcapng()
+        except Exception as ex:
+            logger.exception("Error during bulk upload: %s", ex)
     else:
         print("Invalid selection.")
-
-def list_running_scans(tool):
-    if hasattr(tool, "running_processes") and tool.running_processes:
-        print("\nActive Scans for Hcxtool:")
-        for profile, process in tool.running_processes.items():
-            status = "Running" if process.poll() is None else "Completed"
-            print(f"Profile {profile}: {status}")
-    else:
-        print("\nNo active scans for Hcxtool.")
-
-def stop_running_scan(tool):
-    list_running_scans(tool)
-    choice = input("Enter the profile number to stop: ").strip()
-    if not choice.isdigit():
-        print("Invalid input. Please enter a numeric profile key.")
-        return
-    profile = int(choice)
-    tool.stop(profile)
+        logger.debug("upload_wpasec_menu invalid option: %s", choice)
 
 
-if __name__ == "__main__":
-    display_main_menu()
+class EscapeSequenceFilter(logging.Filter):
+    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+
+    def filter(self, record):
+        # Remove escape sequences from the message
+        record.msg = self.ansi_escape.sub('', record.msg)
+        return True
