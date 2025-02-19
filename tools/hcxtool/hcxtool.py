@@ -219,11 +219,58 @@ class Hcxtool(Tool):
             self.release_interfaces()
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
-        stdout, stderr = process.communicate()
+        import time
+
+        # We'll keep only the last N lines of output from stdout and stderr.
+        max_lines = 10
+        stdout_buffer = []
+        stderr_buffer = []
+
+        # Read from process stdout/stderr until it finishes.
+        while True:
+            # Use readline() for stdout (blocking until a line is available)
+            out_line = process.stdout.readline()
+            if out_line:
+                stdout_buffer.append(out_line)
+                # Keep only the last max_lines lines.
+                if len(stdout_buffer) > max_lines:
+                    stdout_buffer.pop(0)
+            # Similarly for stderr.
+            err_line = process.stderr.readline()
+            if err_line:
+                stderr_buffer.append(err_line)
+                if len(stderr_buffer) > max_lines:
+                    stderr_buffer.pop(0)
+
+            # If process has terminated and no more output is available, break.
+            if process.poll() is not None and not out_line and not err_line:
+                # Read any leftover output.
+                remaining_out = process.stdout.read()
+                if remaining_out:
+                    for line in remaining_out.splitlines(True):
+                        stdout_buffer.append(line)
+                        if len(stdout_buffer) > max_lines:
+                            stdout_buffer.pop(0)
+                remaining_err = process.stderr.read()
+                if remaining_err:
+                    for line in remaining_err.splitlines(True):
+                        stderr_buffer.append(line)
+                        if len(stderr_buffer) > max_lines:
+                            stderr_buffer.pop(0)
+                break
+            time.sleep(0.1)
+
+        # Log a summary.
         if process.returncode != 0:
-            self.logger.error(f"hcxdumptool for profile {profile} returned error: {stderr}")
+            self.logger.error(
+                f"hcxdumptool for profile {profile} returned error. Last few error lines:\n{''.join(stderr_buffer)}"
+            )
         else:
-            self.logger.info(f"hcxdumptool for profile {profile} finished successfully: {stdout}")
+            self.logger.info(f"hcxdumptool for profile {profile} finished successfully.")
+
+        # Optionally log a summary of stdout at debug level.
+        self.logger.debug(f"Last few stdout lines for profile {profile}:\n{''.join(stdout_buffer)}")
+
         self.release_interfaces()
         if profile in self.running_processes:
             del self.running_processes[profile]
