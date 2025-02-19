@@ -187,19 +187,22 @@ class Hcxtool(Tool):
         if self.scan_settings.get("tmux", False):
             try:
                 cmd = self.build_command()
-                # Check for root privileges before launching tmux
-                import os
+                # If not root, prompt and run a simple sudo command to cache credentials.
+                import os, subprocess
                 if os.geteuid() != 0:
                     answer = input(
                         "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
                     if answer != "y":
                         self.logger.error("User declined to run command with sudo. Aborting scan.")
                         return
-                    cmd = ["sudo"] + cmd
+                    # Cache sudo credentials; this will prompt for password in the current shell.
+                    subprocess.run(["sudo", "-v"])
+                    # Prepend 'sudo -E' so that environment variables (including your virtualenv settings) are preserved.
+                    cmd = ["sudo", "-E"] + cmd
+
                 session_name = f"{self.name}_scan_{profile}"
                 self.create_tmux_session(session_name)
                 new_window = self.tmux_session.new_window(window_name=session_name, attach=False)
-                # Send the command (and an Enter) to the new tmux window
                 new_window.panes[0].send_keys(" ".join(cmd))
                 new_window.panes[0].send_keys("Enter")
                 self.logger.info(f"Started scan in tmux session '{session_name}' for profile {profile}.")
