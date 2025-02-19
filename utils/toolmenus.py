@@ -1,4 +1,10 @@
 import logging
+import select
+import sys
+import time
+from pathlib import Path
+
+from tools.hcxtool.hcxtool import Hcxtool
 
 global_tools = {}
 
@@ -17,12 +23,15 @@ def list_all_active_processes():
             print(f"Tool: {tool_name} has no active processes.")
 
 def display_main_menu():
+    # Flush any initial control sequences.
+    time.sleep(0.1)
+    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        sys.stdin.read(1)
     while True:
         print("\n=== Main Menu ===")
         print("1: Select a tool")
         print("2: Exit")
         choice = input("Select an option: ").strip()
-
         if choice == "1":
             select_tool_menu()
         elif choice == "2" or choice.lower() == "exit":
@@ -30,6 +39,7 @@ def display_main_menu():
             break
         else:
             print("Invalid option. Please try again.")
+
 
 def select_tool_menu():
     # For now, we only have hcxtool; later you can add more tools.
@@ -50,29 +60,43 @@ def select_tool_menu():
 def hcxtool_submenu():
     from tools.hcxtool.hcxtool import Hcxtool
     tool = Hcxtool(config_file="configs/hcxtool.yaml")
+
     while True:
         print("\n=== Hcxtool Menu ===")
-        print("1: Select Scan: Start")
-        print("2: Select Scan: Stop ")
-        print("3: List All Running Scans")
-        print("4: Upload to WPA-Sec")
-        print("0: Return to Tools Menu")
+        print("1: Launch scan in tmux")
+        print("2: View scan (attach to tmux session)")
+        print("3: Stop a running scan")
+        print("4: Upload results to WPA-sec")
+        print("0: Return to Main Menu")
         choice = input("Select an option: ").strip()
 
-        if choice == "1":
-            run_hcxtool_scan_menu(tool)
+        if choice == "0":
+            break
+        elif choice == "1":
+            profile = input("Enter scan profile number to launch: ").strip()
+            if not profile.isdigit():
+                print("Invalid profile. Please enter a numeric profile key.")
+                continue
+            profile = int(profile)
+            tool.run(profile)
         elif choice == "2":
-            stop_running_scan(tool)
+            session = input("Enter the tmux session name to attach (or press enter for default): ").strip()
+            if not session:
+                session = f"{tool.name}_scan_{input('Enter scan profile number to view: ').strip()}"
+            tool.attach_tmux_session(session)
         elif choice == "3":
-            list_running_scans(tool)
+            profile = input("Enter scan profile number to stop: ").strip()
+            if profile.isdigit():
+                profile = int(profile)
+                tool.stop(profile)
+            else:
+                print("Invalid profile.")
         elif choice == "4":
             upload_wpasec_menu(tool)
-        elif choice == "0":
-            break
         else:
-            print("Invalid option.")
+            print("Invalid option. Please try again.")
 
-def upload_wpasec_menu(tool):
+def upload_wpasec_menu(tool) -> None:
     """
     Presents an upload menu for WPA-sec. The user can choose to upload a single PCAPNG file or all files.
     """

@@ -6,6 +6,7 @@ import argparse
 
 from config import config
 from tools.hcxtool.hcxtool import Hcxtool
+from utils.helper import ensure_tmux_session
 
 def setup_logging():
     log_file = config.LOG_FILE
@@ -30,6 +31,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    ensure_tmux_session()
     args = parse_args()
     setup_logging()
     logging.info("Starting kali-pi tools")

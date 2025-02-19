@@ -3,6 +3,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import libtmux
+
 from utils.helper import load_interfaces_config
 
 
@@ -16,6 +18,7 @@ class Tool:
         self.load_interfaces()
         self.interface_locks = {}
         self.running_processes = {}
+        self.tmux_session = None
 
         # Define standard subdirectories
         self.config_dir = self.base_dir / "configs"
@@ -61,6 +64,23 @@ class Tool:
             raise ValueError(f"Unknown category: {category}")
         return base / filename
 
+    def create_tmux_session(self, session_name: str) -> libtmux.Session:
+        """
+        Create or attach to a tmux session with the given name.
+        """
+        server = libtmux.Server()
+        session = server.find_where({"session_name": session_name})
+        if session is None:
+            session = server.new_session(session_name=session_name, kill_session=True, attach=False)
+        self.tmux_session = session
+        return session
+
+    def attach_tmux_session(self, session_name: str) -> None:
+        """
+        Attach the current terminal to the tmux session.
+        """
+        os.system(f"tmux attach-session -t {session_name}")
+
     def load_interfaces(self):
         # Build the config file path based on the tool's name.
         # Here, self.base_dir is the tool's base directory (e.g. tools/hcxtool)
@@ -94,6 +114,20 @@ class Tool:
         else:
             print(f"Interface {iface} is already in use.")
             return False
+
+    def stop(self, profile) -> None:
+        """
+        Stop a running scan process for the given profile.
+        If the stored object is a tmux session (string), kill that tmux session.
+        Otherwise, if it's a subprocess, terminate it.
+        """
+        if hasattr(self, "running_processes") and profile in self.running_processes:
+            proc_or_session = self.running_processes[profile]
+            if isinstance(proc_or_session, str):
+                os.system(f"tmux kill-session -t {proc_or_session}")
+            else:
+                if proc_or_session.poll() is None:
+                    proc_or_session.terminate()
 
     def release_interfaces(self):
         """Release any reserved interfaces."""
