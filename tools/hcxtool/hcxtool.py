@@ -4,6 +4,7 @@ import logging
 import requests
 import yaml
 import subprocess
+import os
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -193,7 +194,6 @@ class Hcxtool(Tool):
         if self.scan_settings.get("tmux", False):
             try:
                 cmd = self.build_command()
-                import os, subprocess
                 if os.geteuid() != 0:
                     answer = input(
                         "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
