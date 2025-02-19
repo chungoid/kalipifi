@@ -2,9 +2,7 @@ import logging
 import select
 import sys
 import time
-from pathlib import Path
 
-from tools.hcxtool.hcxtool import Hcxtool
 
 global_tools = {}
 
