@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+logger = logging.getLogger(__name__)
+
 
 def ensure_tmux_session():
     if "TMUX" not in os.environ:
@@ -34,7 +36,7 @@ def run_command(command: str) -> Optional[str]:
         )
         return output.strip()
     except subprocess.CalledProcessError as e:
-        logging.debug(f"Error running command '{command}': {e.output}")
+        logger.debug(f"Error running command '{command}': {e.output}")
         return None
 
 
@@ -65,7 +67,7 @@ def get_mac_address(interface: str) -> Optional[str]:
             mac = f.read().strip()
             return mac
     except Exception as e:
-        logging.warning(f"Could not read MAC address from /sys/class/net/{interface}/address: {e}")
+        logger.warning(f"Could not read MAC address from /sys/class/net/{interface}/address: {e}")
         return None
 
 
@@ -92,10 +94,9 @@ def check_client_macs(interfaces: List[str]) -> List[str]:
                     if len(parts) >= 2:
                         client_macs.add(parts[1])
         else:
-            logging.warning(f"Warning: Could not retrieve station dump for interface {iface}")
-    logging.info(f"Found associated client MAC(s): {client_macs}")
+            logger.warning(f"Warning: Could not retrieve station dump for interface {iface}")
+    logger.info(f"Found associated client MAC(s): {client_macs}")
     return list(client_macs)
-
 
 def create_bpf_filter(
         scan_interface: str,
@@ -129,21 +130,21 @@ def create_bpf_filter(
         if mac:
             macs.append(mac)
         else:
-            logging.warning(f"Warning: Could not retrieve MAC address for {iface}")
+            logger.warning(f"Warning: Could not retrieve MAC address for {iface}")
 
     # Include client MACs.
     client_macs = check_client_macs(other_interfaces)
     if client_macs:
-        logging.debug(f"Found client MACs: {client_macs}")
+        logger.debug(f"Found client MACs: {client_macs}")
         macs.extend(client_macs)
 
     # Include any additional MAC addresses.
     if extra_macs:
-        logging.debug(f"Found extra MACs: {extra_macs}")
+        logger.debug(f"Found extra MACs: {extra_macs}")
         macs.extend(extra_macs)
 
     if not macs:
-        logging.warning(
+        logger.warning(
             "No MAC addresses found; aborting BPF filter generation to avoid interfering with own connections.")
         return False
 
@@ -151,15 +152,15 @@ def create_bpf_filter(
     clauses = [f"wlan addr2 {mac}" for mac in macs]
     filter_expr = "not (" + " or ".join(clauses) + ")"
 
-    logging.debug(f"Generated BPF filter expression: {filter_expr}")
+    logger.debug(f"Generated BPF filter expression: {filter_expr}")
 
     # Optionally, you can still write the filter expression to a prefilter file for logging.
     try:
         with prefilter_path.open("w") as f:
             f.write(filter_expr)
-        logging.debug(f"BPF prefilter written to {prefilter_path}")
+        logger.debug(f"BPF prefilter written to {prefilter_path}")
     except IOError as e:
-        logging.error(f"Error writing to {prefilter_path}: {e}")
+        logger.error(f"Error writing to {prefilter_path}: {e}")
         return False
 
     # Backup existing filter file if it exists.
@@ -167,22 +168,22 @@ def create_bpf_filter(
         backup_file = filter_path.with_suffix(".bak")
         try:
             filter_path.rename(backup_file)
-            logging.info(f"BPF filter already exists, backed up to {backup_file}")
+            logger.info(f"BPF filter already exists, backed up to {backup_file}")
         except Exception as e:
-            logging.error(f"Error backing up existing filter file: {e}")
+            logger.error(f"Error backing up existing filter file: {e}")
             return False
 
     # Now pass the filter expression directly to hcxdumptool.
     try:
         cmd = f'hcxdumptool --bpfc="{filter_expr}" > {filter_path}'
         if run_command(cmd) is None:
-            logging.error("hcxdumptool failed to compile the BPF filter")
+            logger.error("hcxdumptool failed to compile the BPF filter")
             return False
     except Exception as e:
-        logging.error(f"Error generating BPF filter file: {e}")
+        logger.error(f"Error generating BPF filter file: {e}")
         return False
 
-    logging.info(f"BPF filter generated: {filter_path.resolve()}")
+    logger.info(f"BPF filter generated: {filter_path.resolve()}")
     return True
 
 
@@ -224,5 +225,3 @@ def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subproce
         # Prepend sudo -E to preserve the current environment (e.g., virtualenv settings)
         cmd = ["sudo", "-E"] + cmd
     return subprocess.Popen(cmd, **kwargs)
-
-
