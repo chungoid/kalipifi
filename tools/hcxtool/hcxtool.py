@@ -44,7 +44,6 @@ class Hcxtool(Tool):
     }
 
     def __init__(self, config_file: str = None):
-        # Initialize logging
         self.logger = logging.getLogger("hcxtool")
         self.logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
@@ -53,10 +52,7 @@ class Hcxtool(Tool):
         ch.setFormatter(formatter)
         self.logger.addHandler(ch)
 
-        # Determine base directory; __file__ is "tools/hcxtool/hcxtool.py"
         base_dir = Path(__file__).resolve().parent
-
-        # Default config file is in "tools/hcxtool/configs/hcxtool.yaml"
         if config_file is None:
             config_file = base_dir / "configs" / "hcxtool.yaml"
         else:
@@ -75,12 +71,11 @@ class Hcxtool(Tool):
             self.logger.exception(f"Failed to load configuration file {config_file}: {e}")
             raise
 
-        # Extract interface configuration and scan profiles.
         interfaces_config = self.config_data.get("interfaces", {})
         scans_config = self.config_data.get("scans", {})
         self.config_data["scans"] = scans_config
 
-        # Default scan settings (empty dict for now)
+        # Initialize scan_settings to empty; it will be populated in run().
         scan_settings = {}
         self.options = self.DEFAULT_OPTIONS.copy()
         self.options.update(scan_settings.get("options", {}))
@@ -97,11 +92,6 @@ class Hcxtool(Tool):
         self.scan_settings = scan_settings
 
     def get_scan_interface(self) -> str:
-        """
-        Determine the scan interface.
-        First, try to get it from the scan profile (self.scan_settings).
-        If not provided, default to the first available WLAN interface with role "monitor".
-        """
         scan_interface = self.scan_settings.get("interface")
         if scan_interface:
             return scan_interface
@@ -114,11 +104,8 @@ class Hcxtool(Tool):
 
     def build_command(self) -> list:
         cmd = ["hcxdumptool"]
-        # Use the scan interface determined by get_scan_interface()
         scan_interface = self.get_scan_interface()
         cmd.extend(["-i", scan_interface])
-
-        # Process output prefix and pcap file path.
         output_prefix_val = self.scan_settings.get("output_prefix")
         if output_prefix_val in (None, "", "none"):
             self.logger.info("No output_prefix defined in configuration.")
@@ -131,8 +118,6 @@ class Hcxtool(Tool):
             if not output_prefix.is_absolute():
                 output_prefix = self.results_dir / output_prefix
             cmd.extend(["-w", str(output_prefix.with_suffix('.pcapng'))])
-
-        # GPS mode.
         if self.scan_settings.get("gpsd", False):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
@@ -140,8 +125,6 @@ class Hcxtool(Tool):
             out_prefix = out_prefix if isinstance(out_prefix, Path) else Path(out_prefix)
             nmea_file = str(out_prefix.with_suffix('.nmea'))
             cmd.append(f"--nmea_out={nmea_file}")
-
-        # Channel option.
         if "channel" in self.scan_settings:
             channel_value = self.scan_settings["channel"]
             if isinstance(channel_value, list):
@@ -151,8 +134,6 @@ class Hcxtool(Tool):
                 if " " in channel_str:
                     channel_str = ",".join(channel_str.split())
             cmd.extend(["-c", channel_str])
-
-        # BPF file.
         bpf_setting = self.scan_settings.get("bpf_file", "default")
         if bpf_setting in (None, "", "none"):
             self.logger.info("No BPF filter will be applied as per configuration.")
@@ -162,8 +143,6 @@ class Hcxtool(Tool):
             else:
                 bpf_file = Path(bpf_setting)
             cmd.append(f"--bpf={bpf_file}")
-
-        # Append additional options.
         for option, value in self.options.items():
             if isinstance(value, bool):
                 if value:
@@ -177,12 +156,6 @@ class Hcxtool(Tool):
         return cmd
 
     def run(self, profile=None) -> None:
-        """
-        Asynchronously run the hcxdumptool scan based on a selected scan profile.
-        If the scan profile lacks an interface, default to the first monitor interface.
-        If "tmux": true is set in the scan profile, launch the command in a new tmux session.
-        Otherwise, run it as a subprocess and monitor it.
-        """
         scans = self.config_data.get("scans", {})
         if scans:
             if profile is None:
@@ -191,9 +164,7 @@ class Hcxtool(Tool):
             if isinstance(profile, str) and profile.isdigit():
                 profile = int(profile)
             if profile not in scans:
-                available = ", ".join(
-                    f"{k} ({scans[k].get('description', 'No description')})" for k in scans
-                )
+                available = ", ".join(f"{k} ({scans[k].get('description', 'No description')})" for k in scans)
                 self.logger.error(f"Scan profile '{profile}' not found. Available profiles: {available}.")
                 return
             self.scan_settings = scans[profile]
@@ -212,7 +183,7 @@ class Hcxtool(Tool):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
 
-        # If "tmux": true is set, launch in a tmux session.
+        # If "tmux": true in scan profile, launch in a tmux session.
         if self.scan_settings.get("tmux", False):
             try:
                 cmd = self.build_command()
@@ -221,15 +192,13 @@ class Hcxtool(Tool):
                 new_window = self.tmux_session.new_window(window_name=session_name, attach=False)
                 new_window.panes[0].send_keys(" ".join(cmd))
                 self.logger.info(f"Started scan in tmux session '{session_name}' for profile {profile}.")
-                # Record session name.
                 self.running_processes[profile] = session_name
-                return  # Exit run() since tmux is handling output.
+                return
             except Exception as e:
                 self.logger.exception(f"Exception while launching tmux session: {e}")
                 self.release_interfaces()
                 return
 
-        # Auto BPF filter generation.
         if self.scan_settings.get("auto_bpf", False):
             wlan_list = self.interfaces.get("wlan", [])
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]
@@ -247,12 +216,10 @@ class Hcxtool(Tool):
         try:
             cmd = self.build_command()
             self.logger.info("Executing command: " + " ".join(cmd))
-            process = run_command_with_root(
-                cmd, prompt=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            process = run_command_with_root(cmd, prompt=True,
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE,
+                                            text=True)
             self.running_processes[profile] = process
             monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
             monitor_thread.start()
@@ -260,7 +227,6 @@ class Hcxtool(Tool):
         except Exception as e:
             self.logger.exception(f"Exception occurred during hcxtool execution: {e}")
             self.release_interfaces()
-
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         stdout, stderr = process.communicate()
@@ -273,23 +239,17 @@ class Hcxtool(Tool):
             del self.running_processes[profile]
         self.logger.info(f"Released interface locks for profile {profile}.")
 
-
     def upload_selected_pcapng(self) -> None:
-        """
-        Lists available .pcapng files for selection and uploads the chosen file.
-        """
         results_dir = self.get_path("results")
         files = self.list_pcapng_files(results_dir)
         if not files:
             self.logger.error("No PCAPNG files found in the results directory.")
             print("No PCAPNG files found.")
             return
-
         print("Available PCAPNG files:")
         for idx, file in enumerate(files, start=1):
             print(f"{idx}: {file.name}")
         print("Type 'all' to upload all files.")
-
         choice = input("Select a file to upload (number or 'all'): ").strip().lower()
         if choice == "all":
             for file in files:
@@ -314,16 +274,12 @@ class Hcxtool(Tool):
             print("Invalid selection. Please enter a number or 'all'.")
 
     def bulk_upload_pcapng(self) -> None:
-        """
-        Finds all .pcapng files in the results directory and uploads each one.
-        """
         results_dir = self.get_path("results")
         files = self.list_pcapng_files(results_dir)
         if not files:
             self.logger.error("No PCAPNG files found in the results directory.")
             print("No PCAPNG files found.")
             return
-
         for file in files:
             self.logger.info(f"Uploading {file.name}...")
             success = self.upload_to_wpasec(file)
@@ -333,22 +289,13 @@ class Hcxtool(Tool):
                 print(f"Failed to upload {file.name}.")
 
     def upload_to_wpasec(self, pcap_path: Path) -> bool:
-        """
-        Upload the pcapng file to WPA-SEC using the API key from the YAML configuration.
-        The API key is stored encrypted in the configuration and decrypted at runtime.
-        Uses the endpoint and header logic from your previous program.
-        """
         try:
-            # Decrypt the API key using our static method.
             api_key = Hcxtool.get_decrypted_api_key(self.config_data)
         except Exception as e:
             self.logger.error(f"Error decrypting API key: {e}")
             return False
-
-        # Use the provided URL and header format.
         url = "https://wpa-sec.stanev.org/?api&upload"
         headers = {"Cookie": f"key={api_key}"}
-
         try:
             self.logger.info(f"Uploading {pcap_path} to WPA-SEC...")
             with pcap_path.open("rb") as f:
@@ -393,6 +340,7 @@ class Hcxtool(Tool):
             return decrypted_key
         except Exception as e:
             raise ValueError("Failed to decrypt API key. Check your passphrase.") from e
+
 
 
 

@@ -25,6 +25,7 @@ class Tool:
         self.defaults_dir = self.base_dir / "defaults"
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
+        self.check_root()
 
         # Defaults true, non-root tools set to false.
         require_root = True

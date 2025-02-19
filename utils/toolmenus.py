@@ -21,7 +21,7 @@ def list_all_active_processes():
             print(f"Tool: {tool_name} has no active processes.")
 
 def display_main_menu():
-    # Flush any initial control sequences.
+    import time, select, sys
     time.sleep(0.1)
     if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
         sys.stdin.read(1)
@@ -38,45 +38,53 @@ def display_main_menu():
         else:
             print("Invalid option. Please try again.")
 
-
 def select_tool_menu():
-    # For now, we only have hcxtool; later you can add more tools.
     print("\n=== Tools Menu ===")
     print("1: Hcxtool")
     print("0: Return to Main Menu")
     choice = input("Select a tool: ").strip()
-
     if choice == "1":
         hcxtool_submenu()
     elif choice == "0":
         return
     else:
         print("Invalid option.")
-        return
 
-############ HCXTOOL MENU FUNCTIONS ############
 def hcxtool_submenu():
     from tools.hcxtool.hcxtool import Hcxtool
     tool = Hcxtool(config_file="configs/hcxtool.yaml")
+    scans = tool.config_data.get("scans", {})
 
     while True:
         print("\n=== Hcxtool Menu ===")
-        print("1: Launch scan in tmux")
+        print("1: Launch scan")
         print("2: View scan (attach to tmux session)")
         print("3: Stop a running scan")
         print("4: Upload results to WPA-sec")
         print("0: Return to Main Menu")
         choice = input("Select an option: ").strip()
-
         if choice == "0":
             break
         elif choice == "1":
-            profile = input("Enter scan profile number to launch: ").strip()
-            if not profile.isdigit():
-                print("Invalid profile. Please enter a numeric profile key.")
-                continue
-            profile = int(profile)
-            tool.run(profile)
+            # Display available scan profiles with keys and descriptions
+            if not scans:
+                print("No scan profiles defined in the configuration.")
+            else:
+                print("\n=== Hcxtool Scan Profiles ===")
+                for key, profile in scans.items():
+                    desc = profile.get("description", "No description")
+                    print(f"{key}: {desc}")
+                selection = input("Select a scan profile by number: ").strip()
+                if not selection.isdigit():
+                    print("Invalid selection, please enter a numeric profile key.")
+                    continue
+                selected_profile = int(selection)
+                if selected_profile not in scans:
+                    print("Invalid profile selection.")
+                    continue
+                print(f"Launching scan profile: {selected_profile} ({scans[selected_profile].get('description')})")
+                tool.run(profile=selected_profile)
+                print(f"Scan profile {selected_profile} launched asynchronously.")
         elif choice == "2":
             session = input("Enter the tmux session name to attach (or press enter for default): ").strip()
             if not session:
@@ -111,31 +119,6 @@ def upload_wpasec_menu(tool) -> None:
         tool.bulk_upload_pcapng()
     else:
         print("Invalid selection.")
-
-def run_hcxtool_scan_menu(tool):
-    scans = tool.config_data.get("scans", {})
-    if not scans:
-        print("No scan profiles defined in the configuration.")
-        return
-
-    print("\n=== Hcxtool Scan Profiles ===")
-    for key, profile in scans.items():
-        desc = profile.get("description", "No description")
-        print(f"{key}: {desc}")
-    choice = input("Select a scan profile by number: ").strip()
-    if not choice.isdigit():
-        print("Invalid selection, please enter a numeric profile key.")
-        return
-    logging.debug(
-        f"Selected scan profile {choice} -- Key: {scans[int(choice)]} Description: {scans[int(choice)]['description']}")
-    selected_profile = int(choice)
-    if selected_profile not in scans:
-        print("Invalid profile selection.")
-        return
-
-    print(f"Launching scan profile: {selected_profile} ({scans[selected_profile].get('description')})")
-    tool.run(profile=selected_profile)
-    print(f"Scan profile {selected_profile} launched asynchronously.")
 
 def list_running_scans(tool):
     if hasattr(tool, "running_processes") and tool.running_processes:
