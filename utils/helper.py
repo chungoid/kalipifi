@@ -36,7 +36,7 @@ def run_command(command: str) -> Optional[str]:
         )
         return output.strip()
     except subprocess.CalledProcessError as e:
-        logger.debug(f"Error running command '{command}': {e.output}")
+        print(f"Error running command '{command}': {e.output}")
         return None
 
 
@@ -135,32 +135,31 @@ def create_bpf_filter(
     # Include client MACs.
     client_macs = check_client_macs(other_interfaces)
     if client_macs:
-        logger.debug(f"Found client MACs: {client_macs}")
+        print(f"Found client MACs: {client_macs}")
         macs.extend(client_macs)
 
     # Include any additional MAC addresses.
     if extra_macs:
-        logger.debug(f"Found extra MACs: {extra_macs}")
+        print(f"Found extra MACs: {extra_macs}")
         macs.extend(extra_macs)
 
     if not macs:
-        logger.warning(
-            "No MAC addresses found; aborting BPF filter generation to avoid interfering with own connections.")
+        print(f"No MAC addresses found; aborting BPF filter generation to avoid interfering with own connections.")
         return False
 
     # Build filter expression using grouped OR inside a NOT.
     clauses = [f"wlan addr2 {mac}" for mac in macs]
     filter_expr = "not (" + " or ".join(clauses) + ")"
 
-    logger.debug(f"Generated BPF filter expression: {filter_expr}")
+    print(f"Generated BPF filter expression: {filter_expr}")
 
     # Optionally, you can still write the filter expression to a prefilter file for logging.
     try:
         with prefilter_path.open("w") as f:
             f.write(filter_expr)
-        logger.debug(f"BPF prefilter written to {prefilter_path}")
+        print(f"BPF prefilter written to {prefilter_path}")
     except IOError as e:
-        logger.error(f"Error writing to {prefilter_path}: {e}")
+        print(f"Error writing to {prefilter_path}: {e}")
         return False
 
     # Backup existing filter file if it exists.
@@ -168,7 +167,7 @@ def create_bpf_filter(
         backup_file = filter_path.with_suffix(".bak")
         try:
             filter_path.rename(backup_file)
-            logger.info(f"BPF filter already exists, backed up to {backup_file}")
+            print(f"BPF filter already exists, backed up to {backup_file}")
         except Exception as e:
             logger.error(f"Error backing up existing filter file: {e}")
             return False
@@ -177,13 +176,13 @@ def create_bpf_filter(
     try:
         cmd = f'hcxdumptool --bpfc="{filter_expr}" > {filter_path}'
         if run_command(cmd) is None:
-            logger.error("hcxdumptool failed to compile the BPF filter")
+            print("hcxdumptool failed to compile the BPF filter")
             return False
     except Exception as e:
-        logger.error(f"Error generating BPF filter file: {e}")
+        print(f"Error generating BPF filter file: {e}")
         return False
 
-    logger.info(f"BPF filter generated: {filter_path.resolve()}")
+    print(f"BPF filter generated: {filter_path.resolve()}")
     return True
 
 
