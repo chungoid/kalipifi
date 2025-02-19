@@ -156,9 +156,6 @@ class Hcxtool(Tool):
         return cmd
 
     def run(self, profile=None) -> None:
-        # Removed the explicit check_root() call so that the command prompt in run_command_with_root()
-        # can handle prompting for sudo if needed.
-
         scans = self.config_data.get("scans", {})
         if scans:
             if profile is None:
@@ -186,14 +183,25 @@ class Hcxtool(Tool):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
 
-        # If "tmux": true in scan profile, launch in a tmux session.
+        # --- Tmux Mode Branch ---
         if self.scan_settings.get("tmux", False):
             try:
                 cmd = self.build_command()
+                # Check for root privileges before launching tmux
+                import os
+                if os.geteuid() != 0:
+                    answer = input(
+                        "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
+                    if answer != "y":
+                        self.logger.error("User declined to run command with sudo. Aborting scan.")
+                        return
+                    cmd = ["sudo"] + cmd
                 session_name = f"{self.name}_scan_{profile}"
                 self.create_tmux_session(session_name)
                 new_window = self.tmux_session.new_window(window_name=session_name, attach=False)
+                # Send the command (and an Enter) to the new tmux window
                 new_window.panes[0].send_keys(" ".join(cmd))
+                new_window.panes[0].send_keys("Enter")
                 self.logger.info(f"Started scan in tmux session '{session_name}' for profile {profile}.")
                 self.running_processes[profile] = session_name
                 return
@@ -202,15 +210,16 @@ class Hcxtool(Tool):
                 self.release_interfaces()
                 return
 
+        # --- Non-Tmux Mode Branch (unchanged) ---
         if self.scan_settings.get("auto_bpf", False):
             wlan_list = self.interfaces.get("wlan", [])
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]
             from utils.helper import create_bpf_filter
             if not create_bpf_filter(
-                scan_interface,
-                filter_path=self.get_path("defaults", "filter.bpf"),
-                prefilter_path=self.get_path("defaults", "prefilter.txt"),
-                interfaces=interface_names
+                    scan_interface,
+                    filter_path=self.get_path("defaults", "filter.bpf"),
+                    prefilter_path=self.get_path("defaults", "prefilter.txt"),
+                    interfaces=interface_names
             ):
                 self.logger.error("Failed to generate BPF filter; aborting scan.")
                 self.release_interfaces()
@@ -219,7 +228,6 @@ class Hcxtool(Tool):
         try:
             cmd = self.build_command()
             self.logger.info("Executing command: " + " ".join(cmd))
-            # The run_command_with_root function will prompt the user if not running as root and then prepend 'sudo'
             process = run_command_with_root(cmd, prompt=True,
                                             stdout=subprocess.PIPE,
                                             stderr=subprocess.PIPE,
