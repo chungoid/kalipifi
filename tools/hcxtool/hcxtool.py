@@ -156,6 +156,9 @@ class Hcxtool(Tool):
         return cmd
 
     def run(self, profile=None) -> None:
+        # Removed the explicit check_root() call so that the command prompt in run_command_with_root()
+        # can handle prompting for sudo if needed.
+
         scans = self.config_data.get("scans", {})
         if scans:
             if profile is None:
@@ -216,6 +219,7 @@ class Hcxtool(Tool):
         try:
             cmd = self.build_command()
             self.logger.info("Executing command: " + " ".join(cmd))
+            # The run_command_with_root function will prompt the user if not running as root and then prepend 'sudo'
             process = run_command_with_root(cmd, prompt=True,
                                             stdout=subprocess.PIPE,
                                             stderr=subprocess.PIPE,
@@ -340,3 +344,4 @@ class Hcxtool(Tool):
             return decrypted_key
         except Exception as e:
             raise ValueError("Failed to decrypt API key. Check your passphrase.") from e
+
