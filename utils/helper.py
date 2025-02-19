@@ -2,6 +2,8 @@ import os
 import sys
 import subprocess
 import logging
+
+import prompt
 import yaml
 from datetime import datetime
 from pathlib import Path
@@ -200,10 +202,10 @@ def load_interfaces_config(config_file: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> subprocess.Popen:
+def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subprocess.Popen":
     """
-    Runs the given command, ensuring it runs with root privileges.
-    If not running as root and prompt is True, prompts the user whether to re-run the command via sudo.
+    Runs the given command with root privileges.
+    If not running as root and prompt is True, prompts the user to run the command with sudo.
 
     Parameters:
         cmd (list): The command to run (as a list of arguments).
@@ -221,5 +223,8 @@ def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> subproces
             answer = input("This tool requires root privileges. Run command with sudo? (y/n): ").strip().lower()
             if answer != "y":
                 raise PermissionError("Tool requires root privileges. Aborting command.")
-        cmd = ["sudo"] + cmd
+        # Prepend sudo -E to preserve the current environment (e.g., virtualenv settings)
+        cmd = ["sudo", "-E"] + cmd
     return subprocess.Popen(cmd, **kwargs)
+
+

@@ -1,9 +1,10 @@
 import base64
-import subprocess
 import threading
 import logging
 import requests
 import yaml
+import os
+import subprocess
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -12,9 +13,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from tools.tools import Tool
-from utils.helper import generate_default_prefix, run_command_with_root
 from utils.toolmenus import register_tool
-
+from utils.helper import generate_default_prefix, run_command_with_root
 
 class Hcxtool(Tool):
     DEFAULT_OPTIONS = {
@@ -106,6 +106,7 @@ class Hcxtool(Tool):
         cmd = ["hcxdumptool"]
         scan_interface = self.get_scan_interface()
         cmd.extend(["-i", scan_interface])
+
         output_prefix_val = self.scan_settings.get("output_prefix")
         if output_prefix_val in (None, "", "none"):
             self.logger.info("No output_prefix defined in configuration.")
@@ -118,6 +119,7 @@ class Hcxtool(Tool):
             if not output_prefix.is_absolute():
                 output_prefix = self.results_dir / output_prefix
             cmd.extend(["-w", str(output_prefix.with_suffix('.pcapng'))])
+
         if self.scan_settings.get("gpsd", False):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
@@ -125,6 +127,7 @@ class Hcxtool(Tool):
             out_prefix = out_prefix if isinstance(out_prefix, Path) else Path(out_prefix)
             nmea_file = str(out_prefix.with_suffix('.nmea'))
             cmd.append(f"--nmea_out={nmea_file}")
+
         if "channel" in self.scan_settings:
             channel_value = self.scan_settings["channel"]
             if isinstance(channel_value, list):
@@ -134,6 +137,7 @@ class Hcxtool(Tool):
                 if " " in channel_str:
                     channel_str = ",".join(channel_str.split())
             cmd.extend(["-c", channel_str])
+
         bpf_setting = self.scan_settings.get("bpf_file", "default")
         if bpf_setting in (None, "", "none"):
             self.logger.info("No BPF filter will be applied as per configuration.")
@@ -143,6 +147,7 @@ class Hcxtool(Tool):
             else:
                 bpf_file = Path(bpf_setting)
             cmd.append(f"--bpf={bpf_file}")
+
         for option, value in self.options.items():
             if isinstance(value, bool):
                 if value:
@@ -152,10 +157,12 @@ class Hcxtool(Tool):
                     cmd.append(f"{option}={value}")
                 else:
                     cmd.extend([option, str(value)])
+
         self.logger.debug("Built command: " + " ".join(cmd))
         return cmd
 
     def run(self, profile=None) -> None:
+        # Process the scan profile configuration.
         scans = self.config_data.get("scans", {})
         if scans:
             if profile is None:
@@ -183,29 +190,27 @@ class Hcxtool(Tool):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
 
-        # --- Tmux Mode Branch ---
+        # --- Tmux Mode Branch: Launch scan in a new detached tmux session ---
         if self.scan_settings.get("tmux", False):
             try:
                 cmd = self.build_command()
-                # If not root, prompt and run a simple sudo command to cache credentials.
                 import os, subprocess
+                # If not root, prompt and run 'sudo -v' to cache credentials.
                 if os.geteuid() != 0:
                     answer = input(
                         "This tool requires root privileges to run hcxdumptool in tmux. Run with sudo? (y/n): ").strip().lower()
                     if answer != "y":
                         self.logger.error("User declined to run command with sudo. Aborting scan.")
                         return
-                    # Cache sudo credentials; this will prompt for password in the current shell.
-                    subprocess.run(["sudo", "-v"])
-                    # Prepend 'sudo -E' so that environment variables (including your virtualenv settings) are preserved.
+                    subprocess.run(["sudo", "-v"])  # cache credentials
+                    # Use 'sudo -E' to preserve your environment.
                     cmd = ["sudo", "-E"] + cmd
 
                 session_name = f"{self.name}_scan_{profile}"
-                self.create_tmux_session(session_name)
-                new_window = self.tmux_session.new_window(window_name=session_name, attach=False)
-                new_window.panes[0].send_keys(" ".join(cmd))
-                new_window.panes[0].send_keys("Enter")
-                self.logger.info(f"Started scan in tmux session '{session_name}' for profile {profile}.")
+                full_cmd = " ".join(cmd)
+                # Launch a new detached tmux session that runs the full command.
+                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, full_cmd])
+                self.logger.info(f"Started scan in new tmux session '{session_name}' for profile {profile}.")
                 self.running_processes[profile] = session_name
                 return
             except Exception as e:
@@ -213,7 +218,7 @@ class Hcxtool(Tool):
                 self.release_interfaces()
                 return
 
-        # --- Non-Tmux Mode Branch (unchanged) ---
+        # --- Non-Tmux Mode Branch ---
         if self.scan_settings.get("auto_bpf", False):
             wlan_list = self.interfaces.get("wlan", [])
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]

@@ -42,10 +42,6 @@ def parse_args():
 
 
 def main():
-    # Ensure we run inside a tmux session if desired.
-    ensure_tmux_session()
-
-    # Set up logging (root logger)
     setup_logging()
     logging.info("Starting kali-pi tools")
 
