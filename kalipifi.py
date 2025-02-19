@@ -4,12 +4,15 @@ import sys
 import logging
 import argparse
 
-from config.config import LOG_FILE
+from config.config import LOG_FILE, LOG_DIR
 from tools.hcxtool.hcxtool import Hcxtool
 from utils.toolmenus import display_main_menu, EscapeSequenceFilter, cleanup_all_tools
 
 
 def setup_logging():
+    # Ensure the log directory exists.
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
     # Configure the root logger so that all logging calls use the same configuration.
     logger = logging.getLogger()  # root logger
     logger.setLevel(logging.DEBUG)
