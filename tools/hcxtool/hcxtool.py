@@ -208,7 +208,7 @@ class Hcxtool(Tool):
                 session_name = f"{self.name}_scan_{profile}"
                 full_cmd = " ".join(cmd)
                 # Launch a new detached tmux session running the full command.
-                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, full_cmd], check=True)
+                subprocess.run(["tmux", "new-session", "-d", "-s", session_name, "bash", "-c", full_cmd], check=True)
                 self.logger.info(f"Started scan in new tmux session '{session_name}' for profile {profile}.")
                 self.running_processes[profile] = session_name
                 return
