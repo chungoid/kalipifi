@@ -99,35 +99,46 @@ class Hcxtool(Tool):
         # Save scan settings.
         self.scan_settings = scan_settings
 
+
+    def get_scan_interface(self) -> str:
+        """
+        Determine the scan interface.
+        First, try to get it from the scan profile; if not provided,
+        default to the first available WLAN interface with role "monitor" from self.interfaces.
+        """
+        # Try to get interface from scan settings.
+        scan_interface = self.scan_settings.get("interface")
+        if scan_interface:
+            return scan_interface
+
+        # Otherwise, default to the first available monitor interface.
+        wlan_list = self.interfaces.get("wlan", [])
+        for iface in wlan_list:
+            if iface.get("role", "").lower() == "monitor":
+                self.logger.info(
+                    f"No interface defined in scan profile; defaulting to monitor interface: {iface.get('name')}")
+                return iface.get("name")
+        raise ValueError("No interface defined in scan profile and no monitor interface found in configuration.")
+
+
     def build_command(self) -> list:
         cmd = ["hcxdumptool"]
 
-        # Determine the interface (default: first WLAN interface)
-        #wlan_interfaces = self.interfaces.get("wlan", [])
-        #if not wlan_interfaces:
-        #   self.logger.error("No WLAN interfaces defined in configuration.")
-        #    raise ValueError("No WLAN interfaces defined.")
-        #iface = wlan_interfaces[0].get("name")
-        #cmd.extend(["-i", iface])
+        # Use the scan profile's interface if provided.
+        scan_interface = self.get_scan_interface()
 
-        wlan_interfaces = self.interfaces.get("wlan_interfaces", {})
-        if not wlan_interfaces:
-            self.logger.error("No WLAN interfaces defined in configuration.")
-            raise ValueError("No WLAN interfaces defined in configuration.")
-        iface = self.scan_settings.get("interface", {})
-        cmd.extend(["-i", iface])
+        # Use the selected interface in the command.
+        cmd.extend(["-i", scan_interface])
 
         # Process output prefix and corresponding pcap file.
         output_prefix_val = self.scan_settings.get("output_prefix")
         if output_prefix_val in (None, "", "none"):
             self.logger.info("No output_prefix defined in configuration.")
         elif output_prefix_val == "default":
-            # Generate a default prefix and convert it to a Path.
             default_prefix = Path(generate_default_prefix())
             self.scan_settings["output_prefix"] = default_prefix
             cmd.extend(["-w", str(default_prefix.with_suffix('.pcapng'))])
         else:
-            # Ensure output_prefix is a Path
             output_prefix = output_prefix_val if isinstance(output_prefix_val, Path) else Path(output_prefix_val)
             cmd.extend(["-w", str(output_prefix.with_suffix('.pcapng'))])
 
@@ -136,7 +147,6 @@ class Hcxtool(Tool):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
             out_prefix = self.scan_settings.get("output_prefix")
-            # Ensure it is a Path
             out_prefix = out_prefix if isinstance(out_prefix, Path) else Path(out_prefix)
             nmea_file = str(out_prefix.with_suffix('.nmea'))
             cmd.append(f"--nmea_out={nmea_file}")
@@ -152,7 +162,7 @@ class Hcxtool(Tool):
                     channel_str = ",".join(channel_str.split())
             cmd.extend(["-c", channel_str])
 
-        # Handle BPF file: use default from defaults_dir if bpf_file is set to "default"
+        # Handle BPF file.
         bpf_setting = self.scan_settings.get("bpf_file", "default")
         if bpf_setting in (None, "", "none"):
             self.logger.info("No BPF filter will be applied as per configuration.")
@@ -180,39 +190,29 @@ class Hcxtool(Tool):
     def run(self, profile=None) -> None:
         """
         Asynchronously run the hcxdumptool scan based on a selected scan profile from the YAML configuration.
-        The scan is launched in a separate thread so that the interactive menu remains responsive.
+        If the scan profile does not specify an interface, default to the first monitor interface in the global config.
         """
         scans = self.config_data.get("scans", {})
         if scans:
             if profile is None:
-                # Select the first available profile if none specified.
                 profile = next(iter(scans))
                 self.logger.info(f"No scan profile specified. Using default profile: '{profile}'.")
             if isinstance(profile, str) and profile.isdigit():
                 profile = int(profile)
             if profile not in scans:
                 available = ", ".join(
-                    str(k) + " (" + scans[k].get("description", "No description") + ")" for k in scans)
+                    f"{k} ({scans[k].get('description', 'No description')})" for k in scans
+                )
                 self.logger.error(f"Scan profile '{profile}' not found. Available profiles: {available}.")
                 return
             self.scan_settings = scans[profile]
         else:
             self.logger.warning("No scan profiles defined under 'scans'. Falling back to single scan configuration.")
 
-        # Validate interfaces.
-        if not self.validate_interfaces():
-            self.logger.error("Interface validation failed.")
-            return
+        # Determine which interface to use from the scan definition.
+        scan_interface = self.get_scan_interface()
 
-        # Determine which interface to use (profile may override this).
-        scan_interface = self.scan_settings.get("interface")
-        if not scan_interface:
-            wlan_interfaces = self.interfaces.get("wlan", [])
-            if not wlan_interfaces:
-                self.logger.error("No WLAN interfaces available in configuration.")
-                return
-            scan_interface = wlan_interfaces[0].get("name")
-
+        # Reserve the selected interface.
         if not self.reserve_interface(scan_interface):
             self.logger.error(f"Interface {scan_interface} is already in use; aborting scan.")
             return
@@ -223,10 +223,10 @@ class Hcxtool(Tool):
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]
             from utils.helper import create_bpf_filter
             if not create_bpf_filter(
-                scan_interface,
-                filter_path=self.get_path("defaults", "filter.bpf"),
-                prefilter_path=self.get_path("defaults", "prefilter.txt"),
-                interfaces=interface_names
+                    scan_interface,
+                    filter_path=self.get_path("defaults", "filter.bpf"),
+                    prefilter_path=self.get_path("defaults", "prefilter.txt"),
+                    interfaces=interface_names
             ):
                 self.logger.error("Failed to generate BPF filter; aborting scan.")
                 self.release_interfaces()
