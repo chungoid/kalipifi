@@ -99,12 +99,12 @@ class Hcxtool(Tool):
         # Save scan settings.
         self.scan_settings = scan_settings
 
-
     def get_scan_interface(self) -> str:
         """
         Determine the scan interface.
-        First, try to get it from the scan profile; if not provided,
-        default to the first available WLAN interface with role "monitor" from self.interfaces.
+        First, try to get it from the scan profile (self.scan_settings).
+        If not provided, default to the first available WLAN interface with role "monitor"
+        from the global interfaces configuration.
         """
         # Try to get interface from scan settings.
         scan_interface = self.scan_settings.get("interface")
@@ -116,14 +116,15 @@ class Hcxtool(Tool):
         for iface in wlan_list:
             if iface.get("role", "").lower() == "monitor":
                 self.logger.info(
-                    f"No interface defined in scan profile; defaulting to monitor interface: {iface.get('name')}")
+                    f"No interface defined in scan profile; defaulting to monitor interface: {iface.get('name')}"
+                )
                 return iface.get("name")
         raise ValueError("No interface defined in scan profile and no monitor interface found in configuration.")
 
     def build_command(self) -> list:
         cmd = ["hcxdumptool"]
 
-        # Use the scan profile's interface (determined by get_scan_interface())
+        # Use the scan interface determined by get_scan_interface()
         scan_interface = self.get_scan_interface()
         cmd.extend(["-i", scan_interface])
 
@@ -188,7 +189,6 @@ class Hcxtool(Tool):
         self.logger.debug("Built command: " + " ".join(cmd))
         return cmd
 
-
     def run(self, profile=None) -> None:
         """
         Asynchronously run the hcxdumptool scan based on a selected scan profile from the YAML configuration.
@@ -208,10 +208,12 @@ class Hcxtool(Tool):
                 self.logger.error(f"Scan profile '{profile}' not found. Available profiles: {available}.")
                 return
             self.scan_settings = scans[profile]
+            # Update options from the scan profile.
+            self.options.update(self.scan_settings.get("options", {}))
         else:
             self.logger.warning("No scan profiles defined under 'scans'. Falling back to single scan configuration.")
 
-        # Determine the scan interface using the helper; update scan_settings if missing.
+        # Determine the scan interface using the helper; update scan_settings accordingly.
         try:
             scan_interface = self.get_scan_interface()
             self.scan_settings["interface"] = scan_interface
@@ -247,12 +249,10 @@ class Hcxtool(Tool):
                 stderr=subprocess.PIPE,
                 text=True
             )
-            # Store the process in a dictionary keyed by profile.
             if not hasattr(self, "running_processes"):
                 self.running_processes = {}
             self.running_processes[profile] = process
 
-            # Launch a separate thread to monitor process output and cleanup.
             monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
             monitor_thread.start()
 
@@ -260,6 +260,7 @@ class Hcxtool(Tool):
         except Exception as e:
             self.logger.exception(f"Exception occurred during hcxtool execution: {e}")
             self.release_interfaces()
+
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
