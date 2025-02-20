@@ -47,7 +47,7 @@ scans:
     description: "wlan1; aggressive (-A -F --rcascan=a --bpf) note: cli output only"
     interface: wlan1
     auto_bpf: true
-    bpf_file: default
+    bpf_file:
     tmux: true
     options:
       "--rcascan": a

@@ -135,19 +135,29 @@ class Hcxtool(Tool):
         else:
             if bpf_setting == "default":
                 bpf_file = self.defaults_dir / "filter.bpf"
+                self.logger.debug(f"Using BPF filter from self.defaults_dir: {bpf_file}")
             else:
                 bpf_file = Path(bpf_setting)
+                self.logger.debug(f"Using BPF filter from Path(bpf_setting): {bpf_file}")
             cmd.append(f"--bpf={bpf_file}")
+            self.logger.debug(f"appended --bpf: {cmd}")
+
 
         for option, value in self.options.items():
             if isinstance(value, bool):
                 if value:
+                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.append(option)
+                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
             elif value is not None:
                 if option.startswith("--"):
+                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.append(f"{option}={value}")
+                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
                 else:
+                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.extend([option, str(value)])
+                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
 
         self.logger.debug("Built command: " + " ".join(cmd))
         return cmd
