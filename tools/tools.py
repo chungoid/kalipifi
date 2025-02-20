@@ -155,7 +155,7 @@ class Tool:
         if self.setup_tmux_session(tool_name):
             tmux_window = f"{tool_name}:{window_id}"
             tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
-            self.logger.info(f"Executing in tmux: {tmux_cmd}")
+            self.logger.info(f"Creating new tmux window_id: {window_id}")
 
             # Run the command and check for errors
             result = subprocess.run(tmux_cmd, shell=True, capture_output=True, text=True)
