@@ -221,8 +221,7 @@ class Hcxtool(Tool):
             if cmd_str:
                 if self.scan_settings.get("tmux", False):
                     self.logger.info(f"Launching in tmux: {cmd_str}")
-                    self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
-                    process = None  # Tmux does not return a process
+                    process = self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
 
                 else:
                     self.logger.info(f"Launching in shell: {cmd_str}")

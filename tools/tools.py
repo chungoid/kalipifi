@@ -147,14 +147,28 @@ class Tool:
             self.logger.error(f"Failed to execute command in shell: {e}")
             return None
 
-    def run_in_tmux(self, tool_name: str, window_id: str, cmd: str):
+    def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
         """
-        Runs a command inside a new tmux window attached to the tool's session.
+        Runs a command inside a new tmux window attached to the tool's session and returns the window name.
         """
+
         if self.setup_tmux_session(tool_name):
-            tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd}"'
+            tmux_window = f"{tool_name}:{window_id}"
+            tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
             self.logger.info(f"Executing in tmux: {tmux_cmd}")
-            subprocess.Popen(tmux_cmd, shell=True)
+
+            # Run the command and check for errors
+            result = subprocess.run(tmux_cmd, shell=True, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                self.logger.critical(f"Tmux command failed: {result.stderr}")
+                return None  # Prevent scan from running
+
+            return tmux_window  # Return window ID if successful
+
+        else:
+            self.logger.critical(f"Failed to create new tmux window for {tool_name} \n {cmd_str}")
+            return None
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
