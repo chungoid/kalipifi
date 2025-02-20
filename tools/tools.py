@@ -189,10 +189,15 @@ class Tool:
 
             while True:
                 try:
-                    # Check if tmux window exists
-                    result = subprocess.run(f"tmux list-windows -F '#I' -t {process_or_tmux.split(':')[0]}",
-                                            shell=True, capture_output=True, text=True)
+                    # Use '#W' to get the window names
+                    result = subprocess.run(
+                        f"tmux list-windows -F '#W' -t {process_or_tmux.split(':')[0]}",
+                        shell=True,
+                        capture_output=True,
+                        text=True
+                    )
 
+                    # Check if the window name (window_id) exists in the list
                     if process_or_tmux.split(":")[1] not in result.stdout.split():
                         self.logger.info(f"Tmux window {process_or_tmux} has closed.")
                         break  # Exit monitoring when the window disappears
@@ -211,7 +216,8 @@ class Tool:
 
             if process_or_tmux.returncode != 0:
                 self.logger.error(
-                    f"Process for profile '{profile}' failed with exit code {process_or_tmux.returncode}.")
+                    f"Process for profile '{profile}' failed with exit code {process_or_tmux.returncode}."
+                )
             else:
                 self.logger.info(f"Process for profile '{profile}' finished successfully.")
 
