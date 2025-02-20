@@ -159,11 +159,15 @@ class Tool:
         """
         Monitors the process, logs output, and handles process termination cleanly.
         """
-        max_lines = 10  # Limit how many lines we store for logging
+        max_lines = 10  # Limit buffer size
         stdout_buffer, stderr_buffer = [], []
 
-        # Ensure process streams are non-blocking
-        streams = [process.stdout, process.stderr]
+        # Ensure process streams are available
+        streams = []
+        if process.stdout:
+            streams.append(process.stdout)
+        if process.stderr:
+            streams.append(process.stderr)
 
         self.logger.info(f"Monitoring process for profile '{profile}'...")
 
@@ -172,7 +176,7 @@ class Tool:
 
             for stream in readable:
                 try:
-                    line = stream.readline().decode().strip()
+                    line = stream.readline().strip()
                     if line:
                         if stream == process.stdout:
                             stdout_buffer.append(line)
@@ -192,11 +196,11 @@ class Tool:
 
             time.sleep(0.1)  # Prevent CPU overuse
 
-        # Capture any remaining output after the process terminates
+        # Capture remaining output after process termination
         for stream, buffer, log_level in [(process.stdout, stdout_buffer, self.logger.debug),
                                           (process.stderr, stderr_buffer, self.logger.error)]:
             try:
-                remaining_output = stream.read().decode().strip().split("\n")
+                remaining_output = stream.read().strip().split("\n")
                 for line in remaining_output:
                     if line:
                         buffer.append(line)
@@ -206,7 +210,7 @@ class Tool:
             except Exception as e:
                 self.logger.error(f"Error reading remaining output: {e}")
 
-        # Final logging summary
+        # Final process status logging
         if process.returncode != 0:
             self.logger.error(
                 f"Process for profile '{profile}' failed. Last stderr lines:\n" + "\n".join(stderr_buffer))
