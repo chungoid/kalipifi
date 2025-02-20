@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import sys
+import os
 import logging
 import argparse
 
 from config.config import LOG_FILE, LOG_DIR
 from tools.hcxtool.hcxtool import Hcxtool
+from utils import helper
 from utils.toolmenus import display_main_menu, EscapeSequenceFilter, cleanup_all_tools
 
 
@@ -33,44 +35,45 @@ def setup_logging():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="kali-pi tools main script")
-    parser.add_argument("--tool", type=str, choices=["hcxtool"],
-                        help="Select the tool to run (if non-interactive mode is desired)")
-    parser.add_argument("--profile", type=str,
-                        help="Specify the scan profile to run (e.g. 1, 2, etc.)")
-    parser.add_argument("--non-interactive", action="store_true",
-                        help="Run in non-interactive mode using provided options")
+    parser.add_argument("--user", action="store_true", default=False,
+                        help="Run tool as non-root user. (effects tmux))")
+
     return parser.parse_args()
 
 
 def main():
     setup_logging()
-    logging.info("Starting kali-pi tools")
+    logging.info("Starting kalipify.py")
 
     args = parse_args()
 
-    if not args.non_interactive:
+    if args.user:
         try:
-            display_main_menu()
+            if os.getuid() != 0:
+                logging.info(f"Running as non-root, will limit functionality.")
+                display_main_menu()
+            elif os.getuid() == 0:
+                logging.warning("Running as root with --user option. "
+                                "Run without sudo if using --user option. Exiting...")
+                sys.exit(0)
         except Exception as e:
-            logging.exception("Fatal error in interactive menu: %s", e)
-            sys.exit(1)
+            logging.error(e)
     else:
-        if not args.tool:
-            logging.error("In non-interactive mode, you must specify a tool using --tool")
-            sys.exit(1)
-        if args.tool == "hcxtool":
-            try:
-                tool = Hcxtool(config_file="configs/hcxtool.yaml")
-                tool.run(profile=args.profile)
-            except Exception as e:
-                logging.exception("Error running hcxtool: %s", e)
-                sys.exit(1)
-        else:
-            logging.error(f"Tool '{args.tool}' not recognized.")
-            sys.exit(1)
+        try:
+            helper.set_root()
+            if os.getuid() == 0:
+                logging.info(f"Running as Root: {bool(helper.check_root)}")
+                display_main_menu()
+            else:
+                if not args.user and os.getuid() != 0:
+                    logging.error("Unable to set root. Please run with sudo if not using --user option.")
+        except PermissionError:
+            logging.error("Kalipifi.py defaults to root, either run with sudo or enable --user option to disable "
+                          "root permissions. Exiting...")
+        except Exception as e:
+            logging.error(f"Error: {e}")
 
-        # stop tool processes & release locked interfaces
-        cleanup_all_tools()
+    cleanup_all_tools()
 
 
 if __name__ == "__main__":

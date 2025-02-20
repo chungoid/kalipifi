@@ -1,9 +1,7 @@
 import base64
 import threading
-import logging
 import requests
 import yaml
-import subprocess
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -13,7 +11,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from tools.tools import Tool
 from utils.toolmenus import register_tool
-from utils.helper import generate_default_prefix, run_command_with_root
+from utils.helper import generate_default_prefix
+from utils.helper import create_bpf_filter
 
 class Hcxtool(Tool):
     DEFAULT_OPTIONS = {
@@ -43,14 +42,6 @@ class Hcxtool(Tool):
     }
 
     def __init__(self, config_file: str = None):
-        self.logger = logging.getLogger("hcxtool")
-        self.logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('[%(asctime)s] %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-        self.logger.addHandler(ch)
-
         base_dir = Path(__file__).resolve().parent
         if config_file is None:
             config_file = base_dir / "configs" / "hcxtool.yaml"
@@ -70,6 +61,7 @@ class Hcxtool(Tool):
             self.logger.exception(f"Failed to load configuration file {config_file}: {e}")
             raise
 
+        # Populates scan & interface Dicts from config/hcxtool.yaml
         interfaces_config = self.config_data.get("interfaces", {})
         scans_config = self.config_data.get("scans", {})
         self.config_data["scans"] = scans_config
@@ -161,6 +153,7 @@ class Hcxtool(Tool):
         return cmd
 
     def run(self, profile=None) -> None:
+        process = None # default value used to ensure process creation
         # Process the scan profile configuration.
         scans = self.config_data.get("scans", {})
         if scans:
@@ -192,7 +185,7 @@ class Hcxtool(Tool):
         if self.scan_settings.get("auto_bpf", False):
             wlan_list = self.interfaces.get("wlan", [])
             interface_names = [iface["name"] for iface in wlan_list if "name" in iface]
-            from utils.helper import create_bpf_filter
+
             if not create_bpf_filter(
                     scan_interface,
                     filter_path=self.get_path("defaults", "filter.bpf"),
@@ -204,77 +197,33 @@ class Hcxtool(Tool):
                 return
 
         try:
-            cmd = self.build_command()
-            self.logger.info("Executing command: " + " ".join(cmd))
-            process = run_command_with_root(cmd, prompt=True,
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE,
-                                            text=True)
-            self.running_processes[profile] = process
+            cmd_str = self.cmd_to_string(self.build_command())  # FIXED: Correct function name
+            self.logger.debug(f"Built command: {cmd_str}")
+
+            if cmd_str:
+                if self.scan_settings.get("tmux", False):
+                    self.logger.info(f"Launching in tmux: {cmd_str}")
+                    self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
+                    process = None  # Tmux does not return a process
+
+                else:
+                    self.logger.info(f"Launching in shell: {cmd_str}")
+                    process = self.run_in_shell(cmd_str)
+                    if process:
+                        self.running_processes[profile] = process
+
+        except Exception as e:
+            self.logger.critical(f"Error launching scan: {e}")
+            self.release_interfaces()
+            return
+
+            # Process Monitoring
+        if process:
             monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
             monitor_thread.start()
-            self.logger.info(f"Started scan for profile {profile}.")
-        except Exception as e:
-            self.logger.exception(f"Exception occurred during hcxdumptool execution: {e}")
-            self.release_interfaces()
-
-    def _monitor_process(self, process: subprocess.Popen, profile) -> None:
-        import time
-
-        # We'll keep only the last N lines of output from stdout and stderr.
-        max_lines = 10
-        stdout_buffer = []
-        stderr_buffer = []
-
-        # Read from process stdout/stderr until it finishes.
-        while True:
-            # Use readline() for stdout (blocking until a line is available)
-            out_line = process.stdout.readline()
-            if out_line:
-                stdout_buffer.append(out_line)
-                # Keep only the last max_lines lines.
-                if len(stdout_buffer) > max_lines:
-                    stdout_buffer.pop(0)
-            # Similarly for stderr.
-            err_line = process.stderr.readline()
-            if err_line:
-                stderr_buffer.append(err_line)
-                if len(stderr_buffer) > max_lines:
-                    stderr_buffer.pop(0)
-
-            # If process has terminated and no more output is available, break.
-            if process.poll() is not None and not out_line and not err_line:
-                # Read any leftover output.
-                remaining_out = process.stdout.read()
-                if remaining_out:
-                    for line in remaining_out.splitlines(True):
-                        stdout_buffer.append(line)
-                        if len(stdout_buffer) > max_lines:
-                            stdout_buffer.pop(0)
-                remaining_err = process.stderr.read()
-                if remaining_err:
-                    for line in remaining_err.splitlines(True):
-                        stderr_buffer.append(line)
-                        if len(stderr_buffer) > max_lines:
-                            stderr_buffer.pop(0)
-                break
-            time.sleep(0.1)
-
-        # Log a summary.
-        if process.returncode != 0:
-            self.logger.error(
-                f"hcxdumptool for profile {profile} returned error. Last few error lines:\n{''.join(stderr_buffer)}"
-            )
         else:
-            self.logger.info(f"hcxdumptool for profile {profile} finished successfully.")
-
-        # Optionally log a summary of stdout at debug level.
-        self.logger.debug(f"Last few stdout lines for profile {profile}:\n{''.join(stdout_buffer)}")
-
-        self.release_interfaces()
-        if profile in self.running_processes:
-            del self.running_processes[profile]
-        self.logger.info(f"Released interface locks for profile {profile}.")
+            self.logger.critical(f"Failed to create process for scan profile {profile}.")
+            self.release_interfaces()
 
     def upload_selected_pcapng(self) -> None:
         results_dir = self.get_path("results")

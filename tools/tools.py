@@ -1,6 +1,10 @@
 import fcntl
+import logging
 import os
+import select
+import shlex
 import subprocess
+import time
 from pathlib import Path
 
 from utils.helper import load_interfaces_config
@@ -16,6 +20,7 @@ class Tool:
         self.load_interfaces()
         self.interface_locks = {}
         self.running_processes = {}
+        self.require_root = True
 
         # Define standard subdirectories
         self.config_dir = self.base_dir / "configs"
@@ -23,8 +28,15 @@ class Tool:
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
 
-        # Defaults true, non-root tools set to false.
-        require_root = True
+        # Setup logger
+        self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(logging.DEBUG)  # Adjust log level as needed
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(f"[{self.name}] %(levelname)s: %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.info(f"Initialized tool: {self.name}")
+
 
     @staticmethod
     def _interface_exists(iface):
@@ -34,9 +46,16 @@ class Tool:
         except subprocess.CalledProcessError:
             return False
 
-    def check_root(self):
-        if os.geteuid() != 0:
-            raise PermissionError("This tool must be run as root.")
+    @staticmethod
+    def cmd_to_string(cmd_list: list) -> str:
+        return shlex.join(cmd_list)
+
+    @staticmethod
+    def check_uid():
+        return os.geteuid()
+
+    def get_require_root(self):
+        return bool(self.require_root)
 
     def setup_directories(self):
         # Create directories if they do not exist.
@@ -93,6 +112,112 @@ class Tool:
             print(f"Interface {iface} is already in use.")
             return False
 
+    def setup_tmux_session(self, tool_name: str) -> bool:
+        """
+        Creates a named tmux session for the tool if not already running.
+        Returns True if tmux session is enabled, False otherwise.
+        """
+        if not self.settings.get("tmux", False):
+            self.logger.info(f"Tmux is disabled. Running {tool_name} in the normal shell.")
+            return False
+
+        # Check if the tmux session exists; if not, create it
+        check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
+        if subprocess.call(check_session_cmd, shell=True) != 0:
+            self.logger.info(f"Creating new tmux session for {tool_name}")
+            subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
+
+        return True
+
+    def run_in_shell(self, cmd: str):
+        """
+        Runs a command directly in the shell (non-tmux mode).
+        """
+        cmd_str = shlex.join(cmd)  # Safer string conversion for shell execution
+        self.logger.info(f"Executing in shell: {cmd_str}")
+
+        try:
+            process = subprocess.Popen(cmd_str, shell=True)
+            return process  # Return process object for monitoring if needed
+        except Exception as e:
+            self.logger.error(f"Failed to execute command in shell: {e}")
+            return None
+
+    def run_in_tmux(self, tool_name: str, window_id: str, cmd: str):
+        """
+        Runs a command inside a new tmux window attached to the tool's session.
+        """
+        if self.setup_tmux_session(tool_name):
+            tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd}"'
+            self.logger.info(f"Executing in tmux: {tmux_cmd}")
+            subprocess.Popen(tmux_cmd, shell=True)
+        else:
+            self.logger.info(f"Executing in normal shell: {cmd}")
+            subprocess.Popen(cmd, shell=True)
+
+    def _monitor_process(self, process: subprocess.Popen, profile) -> None:
+        """
+        Monitors the process, logs output, and handles process termination cleanly.
+        """
+        max_lines = 10  # Limit how many lines we store for logging
+        stdout_buffer, stderr_buffer = [], []
+
+        # Ensure process streams are non-blocking
+        streams = [process.stdout, process.stderr]
+
+        self.logger.info(f"Monitoring process for profile '{profile}'...")
+
+        while process.poll() is None:  # While process is running
+            readable, _, _ = select.select(streams, [], [], 0.1)
+
+            for stream in readable:
+                try:
+                    line = stream.readline().decode().strip()
+                    if line:
+                        if stream == process.stdout:
+                            stdout_buffer.append(line)
+                            self.logger.debug(f"[{profile} STDOUT] {line}")
+                        else:
+                            stderr_buffer.append(line)
+                            self.logger.error(f"[{profile} STDERR] {line}")
+
+                        # Trim buffer size
+                        if len(stdout_buffer) > max_lines:
+                            stdout_buffer.pop(0)
+                        if len(stderr_buffer) > max_lines:
+                            stderr_buffer.pop(0)
+
+                except Exception as e:
+                    self.logger.error(f"Error reading from process stream: {e}")
+
+            time.sleep(0.1)  # Prevent CPU overuse
+
+        # Capture any remaining output after the process terminates
+        for stream, buffer, log_level in [(process.stdout, stdout_buffer, self.logger.debug),
+                                          (process.stderr, stderr_buffer, self.logger.error)]:
+            try:
+                remaining_output = stream.read().decode().strip().split("\n")
+                for line in remaining_output:
+                    if line:
+                        buffer.append(line)
+                        log_level(f"[{profile} OUTPUT] {line}")
+                        if len(buffer) > max_lines:
+                            buffer.pop(0)
+            except Exception as e:
+                self.logger.error(f"Error reading remaining output: {e}")
+
+        # Final logging summary
+        if process.returncode != 0:
+            self.logger.error(
+                f"Process for profile '{profile}' failed. Last stderr lines:\n" + "\n".join(stderr_buffer))
+        else:
+            self.logger.info(f"Process for profile '{profile}' finished successfully.")
+
+        # Clean up
+        self.release_interfaces()
+        self.running_processes.pop(profile, None)
+        self.logger.info(f"Released interface locks for profile '{profile}'.")
+
     def stop(self, profile) -> None:
         """
         Stop a running scan process for the given profile.
@@ -110,10 +235,11 @@ class Tool:
         self.interface_locks = {}
 
     def run(self):
-        # Placeholder for common run logic.
-        # Subclasses should override this with their specific behavior.
-        self.check_root()
-        raise NotImplementedError
+        if self.get_require_root() and self.check_uid != 0:
+            self.logger.warning(f"Root is required to run this tool.")
+            return False
+
+        return
 
     def cleanup(self):
         # Terminate all running processes for this tool.

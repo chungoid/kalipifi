@@ -1,6 +1,9 @@
 import os
 import subprocess
 import logging
+from operator import truediv
+from os import MFD_ALLOW_SEALING
+
 import yaml
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +12,15 @@ from typing import List, Optional, Dict, Any
 logger = logging.getLogger(__name__)
 logger.propagate = True
 
+global_root = False
+
+def set_root():
+    os.setuid(0)
+    global global_root
+    global_root = True
+
+def check_root():
+    return global_root
 
 def run_command(command: str) -> Optional[str]:
     """
@@ -189,9 +201,9 @@ def load_interfaces_config(config_file: Path) -> Dict[str, Any]:
     with config_file.open("r") as f:
         return yaml.safe_load(f)
 
-
+''''''''''
 def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subprocess.Popen":
-    """
+
     Runs the given command with root privileges.
     If not running as root and prompt is True, prompts the user to run the command with sudo.
 
@@ -205,7 +217,8 @@ def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subproce
 
     Raises:
         PermissionError: If the user declines to run with sudo.
-    """
+    
+    
     if os.geteuid() != 0:
         if prompt:
             answer = input("This tool requires root privileges. Run command with sudo? (y/n): ").strip().lower()
@@ -214,3 +227,4 @@ def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subproce
         # Prepend sudo -E to preserve the current environment (e.g., virtualenv settings)
         cmd = ["sudo", "-E"] + cmd
     return subprocess.Popen(cmd, **kwargs)
+'''''''''
