@@ -1,5 +1,7 @@
 import base64
 import threading
+import traceback
+
 import requests
 import yaml
 from pathlib import Path
@@ -211,36 +213,49 @@ class Hcxtool(Tool):
         self.logger.debug("Attempting to convert list to string & proceed with scan launch logic.")
         try:
             cmd_list = self.build_command()
-            self.logger.debug(f"Raw command list: {cmd_list}")
+            self.logger.debug(f"trying to create raw command list")
             if cmd_list is None: # debug build_command()
-                self.logger.critical("Error: build_command() returned None.")
+                self.logger.critical(f"Error: build_command() returned None. \n command list: {cmd_list}")
                 return
 
             cmd_str = self.cmd_to_string(cmd_list)
-            self.logger.debug(f"Raw command string: {cmd_str}")
+            self.logger.debug(f"Attempted to convert list to string & proceeding with scan launch logic.")
 
             if cmd_str:
                 if self.scan_settings.get("tmux", False):
-                    self.logger.info(f"Launching in tmux: {cmd_str}")
                     process = self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
+                    if process:
+                        self.logger.debug(f"tmux process created in window with name: {process}")
+                    else:
+                        self.logger.error(f"Failed to create tmux process window with "
+                                          f"\n name: {process} \n cmd: {cmd_str}")
+                        return
 
                 else:
-                    self.logger.info(f"Launching in shell: {cmd_str}")
+                    self.logger.info(f"Launching in shell")
                     process = self.run_in_shell(cmd_str)
                     if process:
                         self.running_processes[profile] = process
+                        self.logger.debug(f"Launched in shell with name: {process}")
+                    else:
+                        self.logger.debug(f"Failed to launch shell with name: {process}")
+
 
             self.logger.debug("Finished trying to launch scan command.")
 
         except Exception as e:
             self.logger.critical(f"Error launching scan: {e}")
+            self.logger.debug(traceback.format_exc())
             self.release_interfaces()
             return
 
         # Process Monitoring
         if process:
-            monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
-            monitor_thread.start()
+            try:
+                monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
+                monitor_thread.start()
+            except Exception as e:
+                self.logger.critical(f"Error launching process monitor: {e}")
         else:
             self.logger.critical(f"Failed to create process for scan profile {profile}.")
             self.release_interfaces()
