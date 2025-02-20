@@ -162,20 +162,20 @@ class Tool:
         """
         Runs a command inside a new tmux window attached to the tool's session and returns the window name.
         """
-        window = window_id
+        window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                window = f"{tool_name}:{window}"
-                tmux_cmd = f'tmux new-window -t {tool_name} -n {window} "{cmd_str}"'
-                self.logger.info(f"Creating new tmux window_id: {window}")
+                tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
+                self.logger.info(f"Creating new tmux window: {window}")
 
-                # Run the command and check for errors
-                window = subprocess.run(tmux_cmd, shell=True, capture_output=True, text=True)
+                subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True)
+
             except Exception as e:
-                self.logger.critical(f"Failed to create new tmux window_id: {window} \n Error: {e}")
+                self.logger.critical(f"Failed to create new tmux window: {window} \n Error: {e}")
+                return None
 
-
-        return window  # Return window ID if successful
+        return window
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
