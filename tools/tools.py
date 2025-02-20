@@ -133,10 +133,10 @@ class Tool:
         check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
         try:
             if subprocess.call(check_session_cmd, shell=True) != 0:
-                self.logger.info(f"Creating new tmux session for {tool_name}")
+                self.logger.info(f"Creating new tmux session named: {tool_name}")
                 subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
         except subprocess.CalledProcessError:
-            self.logger.critical(f"Failed to create new tmux session for {tool_name}")
+            self.logger.critical(f"Failed to create new tmux session named: {tool_name}")
             return False
         except Exception as e:
             self.logger.critical(f"Failed to create new tmux session for {tool_name} \n Error: {e}")
@@ -166,7 +166,9 @@ class Tool:
         if self.setup_tmux_session(tool_name):
             try:
                 tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
-                self.logger.info(f"Creating new tmux window: {window}")
+                time.sleep(30)
+
+                self.logger.info(f"Creating new tmux window named: {window} for session named: {tool_name}")
 
                 subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            text=True)
@@ -176,9 +178,6 @@ class Tool:
                 return None
 
         return window
-
-    import time
-    import subprocess
 
     def _monitor_process(self, process_or_tmux, profile) -> None:
         """
