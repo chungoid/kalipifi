@@ -120,7 +120,7 @@ class Hcxtool(Tool):
         if self.scan_settings.get("gpsd", False):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
-            nmea_path = cmd.extend([f"--nmea_out=", str(prefix.with_suffix('.pcapng'))])
+            nmea_path = cmd.extend([f"--nmea_out=", str(prefix.with_suffix('.nmea'))])
             self.logger.debug(f"setting nmea filepath: {nmea_path}")
 
 
