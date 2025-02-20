@@ -1,11 +1,9 @@
 import fcntl
 import logging
 import os
-import select
 import shlex
 import subprocess
 import time
-from logging import exception
 from pathlib import Path
 
 from utils.helper import load_interfaces_config
@@ -177,25 +175,34 @@ class Tool:
 
     def _monitor_tmux_window(self, tmux_window: str, profile) -> None:
         """
-        Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1")
-        using grep to check for window existence, and cleans up when it closes.
+        Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1").
+        Waits until the window no longer exists, then cleans up.
         """
         self.logger.info(f"Monitoring tmux window: {tmux_window}")
-        session = tmux_window.split(":")[0]
-        window_name = tmux_window.split(":")[1]
+        session, window_name = tmux_window.split(":")
 
         while True:
             try:
-                # lists windows in the session, grep check window name
-                check_cmd = f"tmux list-windows -F '#W' -t {session}"
-                result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
-                window_list = result.stdout.splitlines()
-                if window_name not in window_list:
+                # List window names using the '#W' format (one per line)
+                result = subprocess.run(
+                    f"tmux list-windows -F '#W' -t {session}",
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                # Log the raw output for debugging
+                self.logger.debug(f"tmux list-windows output: {result.stdout!r}")
+
+                # Split and strip each line to remove extraneous whitespace
+                window_list = [w.strip() for w in result.stdout.splitlines()]
+                self.logger.debug(f"Window list for session {session}: {window_list}")
+
+                if window_name.strip() not in window_list:
                     self.logger.info(f"Tmux window {tmux_window} has closed.")
-                    break
+                    break  # Exit monitoring when the window is gone
             except Exception as e:
                 self.logger.error(f"Error monitoring tmux window: {e}")
-                break
+                break  # Exit on failure
 
             time.sleep(2)  # Avoid busy waiting
 
