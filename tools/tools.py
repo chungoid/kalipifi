@@ -48,7 +48,16 @@ class Tool:
 
     @staticmethod
     def cmd_to_string(cmd_list: list) -> str:
-        return shlex.join(cmd_list)
+        print(f"received command list: {cmd_list}")
+        cmd_str = None
+        try:
+            cmd_str = shlex.join(cmd_list)
+            print(f"converted to command string: {cmd_str}")
+        except Exception as e:
+            print(f"failed to convert to command string: {e}")
+
+        return cmd_str
+
 
     @staticmethod
     def check_uid():
