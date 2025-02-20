@@ -167,7 +167,7 @@ class Hcxtool(Tool):
         return cmd
 
     def run(self, profile=None) -> None:
-        process = None # default value used to ensure process creation
+        process_or_window = None # default value used to ensure process creation
         # Process the scan profile configuration.
         scans = self.config_data.get("scans", {})
         if scans:
@@ -223,25 +223,12 @@ class Hcxtool(Tool):
 
             if cmd_str:
                 if self.scan_settings.get("tmux", False):
-                    process = self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
-                    if process:
-                        self.logger.debug(f"tmux process created in window with name: {process}")
-                    else:
-                        self.logger.error(f"Failed to create tmux process window with "
-                                          f"\n name: {process} \n cmd: {cmd_str}")
-                        return
-
+                    process_or_window = self.run_in_tmux(self.name, self.scan_settings.get("interface"), cmd_str)
                 else:
                     self.logger.info(f"Launching in shell")
-                    process = self.run_in_shell(cmd_str)
-                    if process:
-                        self.running_processes[profile] = process
-                        self.logger.debug(f"Launched in shell with name: {process}")
-                    else:
-                        self.logger.debug(f"Failed to launch shell with name: {process}")
-
-
-            self.logger.debug("Finished trying to launch scan command.")
+                    process_or_window = self.run_in_shell(cmd_str)
+                    if process_or_window:
+                        self.running_processes[profile] = process_or_window
 
         except Exception as e:
             self.logger.critical(f"Error launching scan: {e}")
@@ -249,16 +236,27 @@ class Hcxtool(Tool):
             self.release_interfaces()
             return
 
-        # Process Monitoring
-        if process:
-            try:
-                monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
-                monitor_thread.start()
-            except Exception as e:
-                self.logger.critical(f"Error launching process monitor: {e}")
+        if process_or_window:
+            if isinstance(process_or_window, str):
+                # For tmux scans, process_or_window is the tmux window identifier
+                monitor_thread = threading.Thread(
+                    target=self._monitor_tmux_window,
+                    args=(process_or_window, profile),
+                    daemon=True
+                )
+            else:
+                # For shell scans, process_or_window is a subprocess.Popen object
+                monitor_thread = threading.Thread(
+                    target=self._monitor_shell_process,
+                    args=(process_or_window, profile),
+                    daemon=True
+                )
+            monitor_thread.start()
         else:
             self.logger.critical(f"Failed to create process for scan profile {profile}.")
             self.release_interfaces()
+
+        return
 
     def upload_selected_pcapng(self) -> None:
         results_dir = self.get_path("results")

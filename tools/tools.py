@@ -179,50 +179,57 @@ class Tool:
 
         return window
 
-    def _monitor_process(self, process_or_tmux, profile) -> None:
+    def _monitor_tmux_window(self, tmux_window: str, profile) -> None:
         """
-        Monitors either a normal process or a tmux window.
+        Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1").
+        Waits until the window no longer exists, then cleans up.
         """
-        if isinstance(process_or_tmux, str):  # It's a tmux window name
-            self.logger.info(f"Monitoring tmux window: {process_or_tmux}")
+        self.logger.info(f"Monitoring tmux window: {tmux_window}")
+        session = tmux_window.split(":")[0]
+        window_name = tmux_window.split(":")[1]
 
-            while True:
-                try:
-                    # Use '#W' to get the window names
-                    result = subprocess.run(
-                        f"tmux list-windows -F '#W' -t {process_or_tmux.split(':')[0]}",
-                        shell=True,
-                        capture_output=True,
-                        text=True
-                    )
-
-                    # Check if the window name (window_id) exists in the list
-                    if process_or_tmux.split(":")[1] not in result.stdout.split():
-                        self.logger.info(f"Tmux window {process_or_tmux} has closed.")
-                        break  # Exit monitoring when the window disappears
-
-                except Exception as e:
-                    self.logger.error(f"Error monitoring tmux window: {e}")
-                    break  # Exit on failure
-
-                time.sleep(2)  # Avoid high CPU usage
-
-        else:  # Normal process monitoring
-            self.logger.info(f"Monitoring process for profile '{profile}'...")
-
-            while process_or_tmux.poll() is None:
-                time.sleep(1)
-
-            if process_or_tmux.returncode != 0:
-                self.logger.error(
-                    f"Process for profile '{profile}' failed with exit code {process_or_tmux.returncode}."
+        while True:
+            try:
+                # List window names using the '#W' format specifier
+                result = subprocess.run(
+                    f"tmux list-windows -F '#W' -t {session}",
+                    shell=True,
+                    capture_output=True,
+                    text=True
                 )
-            else:
-                self.logger.info(f"Process for profile '{profile}' finished successfully.")
+                window_list = result.stdout.split()
+                if window_name not in window_list:
+                    self.logger.info(f"Tmux window {tmux_window} has closed.")
+                    break
+            except Exception as e:
+                self.logger.error(f"Error monitoring tmux window: {e}")
+                break
+            time.sleep(2)  # Pause briefly to avoid excessive CPU usage
 
         self.release_interfaces()
         self.running_processes.pop(profile, None)
         self.logger.info(f"Released interface locks for profile '{profile}'.")
+
+    def _monitor_shell_process(self, process: subprocess.Popen, profile) -> None:
+        """
+        Monitors a normal shell process until it exits.
+        Logs the process result and performs cleanup.
+        """
+        self.logger.info(f"Monitoring process for profile '{profile}'...")
+        while process.poll() is None:
+            time.sleep(1)
+
+        if process.returncode != 0:
+            self.logger.error(
+                f"Process for profile '{profile}' failed with exit code {process.returncode}."
+            )
+        else:
+            self.logger.info(f"Process for profile '{profile}' finished successfully.")
+
+        self.release_interfaces()
+        self.running_processes.pop(profile, None)
+        self.logger.info(f"Released interface locks for profile '{profile}'.")
+
 
     def stop(self, profile) -> None:
         """
