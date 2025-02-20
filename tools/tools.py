@@ -177,69 +177,44 @@ class Tool:
 
         return window
 
-    def _monitor_process(self, process: subprocess.Popen, profile) -> None:
+    import time
+    import subprocess
+
+    def _monitor_process(self, process_or_tmux, profile) -> None:
         """
-        Monitors the process, logs output, and handles process termination cleanly.
+        Monitors either a normal process or a tmux window.
         """
-        max_lines = 10  # Limit buffer size
-        stdout_buffer, stderr_buffer = [], []
+        if isinstance(process_or_tmux, str):  # It's a tmux window name
+            self.logger.info(f"Monitoring tmux window: {process_or_tmux}")
 
-        # Ensure process streams are available
-        streams = []
-        if process.stdout:
-            streams.append(process.stdout)
-        if process.stderr:
-            streams.append(process.stderr)
-
-        self.logger.info(f"Monitoring process for profile '{profile}'...")
-
-        while process.poll() is None:  # While process is running
-            readable, _, _ = select.select(streams, [], [], 0.1)
-
-            for stream in readable:
+            while True:
                 try:
-                    line = stream.readline().strip()
-                    if line:
-                        if stream == process.stdout:
-                            stdout_buffer.append(line)
-                            self.logger.debug(f"[{profile} STDOUT] {line}")
-                        else:
-                            stderr_buffer.append(line)
-                            self.logger.error(f"[{profile} STDERR] {line}")
+                    # Check if tmux window exists
+                    result = subprocess.run(f"tmux list-windows -F '#I' -t {process_or_tmux.split(':')[0]}",
+                                            shell=True, capture_output=True, text=True)
 
-                        # Trim buffer size
-                        if len(stdout_buffer) > max_lines:
-                            stdout_buffer.pop(0)
-                        if len(stderr_buffer) > max_lines:
-                            stderr_buffer.pop(0)
+                    if process_or_tmux.split(":")[1] not in result.stdout.split():
+                        self.logger.info(f"Tmux window {process_or_tmux} has closed.")
+                        break  # Exit monitoring when the window disappears
 
                 except Exception as e:
-                    self.logger.error(f"Error reading from process stream: {e}")
+                    self.logger.error(f"Error monitoring tmux window: {e}")
+                    break  # Exit on failure
 
-            time.sleep(0.1)  # Prevent CPU overuse
+                time.sleep(2)  # Avoid high CPU usage
 
-        # Capture remaining output after process termination
-        for stream, buffer, log_level in [(process.stdout, stdout_buffer, self.logger.debug),
-                                          (process.stderr, stderr_buffer, self.logger.error)]:
-            try:
-                remaining_output = stream.read().strip().split("\n")
-                for line in remaining_output:
-                    if line:
-                        buffer.append(line)
-                        log_level(f"[{profile} OUTPUT] {line}")
-                        if len(buffer) > max_lines:
-                            buffer.pop(0)
-            except Exception as e:
-                self.logger.error(f"Error reading remaining output: {e}")
+        else:  # Normal process monitoring
+            self.logger.info(f"Monitoring process for profile '{profile}'...")
 
-        # Final process status logging
-        if process.returncode != 0:
-            self.logger.error(
-                f"Process for profile '{profile}' failed. Last stderr lines:\n" + "\n".join(stderr_buffer))
-        else:
-            self.logger.info(f"Process for profile '{profile}' finished successfully.")
+            while process_or_tmux.poll() is None:
+                time.sleep(1)
 
-        # Clean up
+            if process_or_tmux.returncode != 0:
+                self.logger.error(
+                    f"Process for profile '{profile}' failed with exit code {process_or_tmux.returncode}.")
+            else:
+                self.logger.info(f"Process for profile '{profile}' finished successfully.")
+
         self.release_interfaces()
         self.running_processes.pop(profile, None)
         self.logger.info(f"Released interface locks for profile '{profile}'.")
