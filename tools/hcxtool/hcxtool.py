@@ -162,7 +162,7 @@ class Hcxtool(Tool):
 
 
 
-        self.logger.debug("Built command: " + " ".join(cmd))
+        self.logger.debug(f"finished building command.")
         return cmd
 
     def run(self, profile=None) -> None:
