@@ -209,14 +209,16 @@ class Hcxtool(Tool):
                 self.release_interfaces()
                 return
 
+        self.logger.debug("Attempting to convert list to string & proceed with scan launch logic.")
         try:
             cmd_list = self.build_command()
+            self.logger.debug(f"Raw command list: {cmd_list}")
             if cmd_list is None: # debug build_command()
                 self.logger.critical("Error: build_command() returned None.")
                 return
 
-            self.logger.debug(f"Raw command list before conversion: {cmd_list}") # debug tools/cmd_to_string()
             cmd_str = self.cmd_to_string(cmd_list)
+            self.logger.debug(f"Raw command string: {cmd_str}")
 
             if cmd_str:
                 if self.scan_settings.get("tmux", False):
@@ -228,6 +230,8 @@ class Hcxtool(Tool):
                     process = self.run_in_shell(cmd_str)
                     if process:
                         self.running_processes[profile] = process
+
+            self.logger.debug("Finished trying to launch scan command.")
 
         except Exception as e:
             self.logger.critical(f"Error launching scan: {e}")
