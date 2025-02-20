@@ -4,6 +4,9 @@ import sys
 import time
 import re
 
+from tools.tools import Tool
+from tools.tools import InterfaceLock
+
 # Global dictionary for registered tools.
 global_tools = {}
 
@@ -89,7 +92,6 @@ def hcxtool_submenu():
         print("Failed to launch Hcxtool. Check logs for details.")
         return
 
-    # Cache the scan profiles for convenience.
     scans = tool.config_data.get("scans", {})
 
     while True:
@@ -97,6 +99,7 @@ def hcxtool_submenu():
         print("1: Launch scan")
         print("2: Stop a running scan")
         print("3: Upload results to WPA-sec")
+        print("4: Check interface locks")
         print("0: Return to Main Menu")
         choice = input("Select an option: ").strip()
         if choice == "0":
@@ -149,6 +152,11 @@ def hcxtool_submenu():
                 upload_wpasec_menu(tool)
             except Exception as ex:
                 logger.exception("Error in upload menu: %s", ex)
+        elif choice == "4":
+            try:
+                tool.check_interface_locks()
+            except Exception as e:
+                logger.exception("Error checking interface locks: %s", e)
         else:
             print("Invalid option. Please try again.")
             logger.debug("Hcxtool submenu invalid option: %s", choice)
@@ -177,6 +185,9 @@ def upload_wpasec_menu(tool) -> None:
     else:
         print("Invalid selection.")
         logger.debug("upload_wpasec_menu invalid option: %s", choice)
+
+def utils_menu(tool) -> None:
+    return
 
 def cleanup_all_tools():
     for tool in global_tools.values():

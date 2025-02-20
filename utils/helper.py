@@ -1,13 +1,12 @@
 import os
 import subprocess
 import logging
-from operator import truediv
-from os import MFD_ALLOW_SEALING
-
 import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+
+from tools.tools import InterfaceLock
 
 logger = logging.getLogger(__name__)
 logger.propagate = True
@@ -200,6 +199,43 @@ def load_interfaces_config(config_file: Path) -> Dict[str, Any]:
     """
     with config_file.open("r") as f:
         return yaml.safe_load(f)
+
+
+def clear_stale_locks(lock_dir="/var/lock", interfaces=None):
+    """
+    Checks for stale lock files and removes them.
+
+    If 'interfaces' is provided as a list, only those interfaces are checked.
+    Otherwise, all files ending with '.lock' in lock_dir are examined.
+    """
+    if interfaces is None:
+        # Look for all .lock files in lock_dir.
+        try:
+            lock_files = [f for f in os.listdir(lock_dir) if f.endswith(".lock")]
+        except Exception as e:
+            print(f"Error reading lock directory {lock_dir}: {e}")
+            return
+
+        for lock_filename in lock_files:
+            iface = lock_filename[:-5]  # Remove the '.lock' suffix.
+            lock = InterfaceLock(iface, lock_dir)
+            if os.path.exists(lock.lock_file) and lock.is_stale():
+                try:
+                    os.remove(lock.lock_file)
+                    print(f"Removed stale lock for interface {iface}.")
+                except Exception as e:
+                    print(f"Failed to remove stale lock for interface {iface}: {e}")
+    else:
+        # Check only for the provided interfaces.
+        for iface in interfaces:
+            lock = InterfaceLock(iface, lock_dir)
+            if os.path.exists(lock.lock_file) and lock.is_stale():
+                try:
+                    os.remove(lock.lock_file)
+                    print(f"Removed stale lock for interface {iface}.")
+                except Exception as e:
+                    print(f"Failed to remove stale lock for interface {iface}: {e}")
+
 
 ''''''''''
 def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subprocess.Popen":

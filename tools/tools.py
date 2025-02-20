@@ -1,3 +1,4 @@
+import errno
 import fcntl
 import logging
 import os
@@ -110,6 +111,25 @@ class Tool:
                         print(f"Error: {iface_name} does not exist.")
                 # Optionally add validations for bluetooth or gpsd if needed.
         return True
+
+    def check_interface_locks(self, lock_dir="/var/lock"):
+        """
+        Iterates over known interfaces and clears any stale lock files.
+        """
+        for iface in self.interfaces:
+            iface_name = iface if isinstance(iface, str) else iface.get("name", "")
+            lock = InterfaceLock(iface_name, lock_dir=lock_dir)
+            if os.path.exists(lock.lock_file):
+                if lock.is_stale():
+                    self.logger.info(f"Stale lock detected for interface {iface_name}. Removing stale lock.")
+                    try:
+                        os.remove(lock.lock_file)
+                    except Exception as e:
+                        self.logger.error(f"Error removing stale lock for {iface_name}: {e}")
+                else:
+                    self.logger.info(f"Interface {iface_name} is currently locked by an active process.")
+            else:
+                self.logger.debug(f"No lock file exists for interface {iface_name}.")
 
     def reserve_interface(self, iface):
         """Attempt to reserve an interface exclusively."""
@@ -274,22 +294,57 @@ class InterfaceLock:
         self.lock_file = os.path.join(lock_dir, f"{iface}.lock")
         self.fd = None
 
+    def is_stale(self):
+        """Return True if the lock file contains a PID that is no longer running."""
+        try:
+            with open(self.lock_file, 'r') as f:
+                pid_str = f.read().strip()
+                if pid_str:
+                    pid = int(pid_str)
+                    # os.kill(pid, 0) will raise an OSError if the PID is not running.
+                    os.kill(pid, 0)
+                    # Process is still running.
+                    return False
+        except (OSError, ValueError):
+            # Either the file can't be read, the PID is invalid, or the process is dead.
+            return True
+        return True
+
     def acquire(self):
+        # If a lock file exists, check if it's stale.
+        if os.path.exists(self.lock_file):
+            if self.is_stale():
+                print(f"Stale lock detected for interface {self.iface}. Removing stale lock.")
+                try:
+                    os.remove(self.lock_file)
+                except Exception as e:
+                    print(f"Error removing stale lock for {self.iface}: {e}")
+                    return False
+            else:
+                print(f"Interface {self.iface} is already locked.")
+                return False
+
         try:
             self.fd = os.open(self.lock_file, os.O_CREAT | os.O_RDWR)
-            # Try to acquire an exclusive lock (non-blocking).
             fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Write our PID into the file (optional).
+            # Clear file contents and write our PID.
+            os.ftruncate(self.fd, 0)
             os.write(self.fd, str(os.getpid()).encode())
             return True
-        except OSError:
+        except OSError as e:
+            if e.errno in (errno.EACCES, errno.EAGAIN):
+                print(f"Interface {self.iface} is already locked (EAGAIN).")
+            else:
+                print(f"Error acquiring lock for {self.iface}: {e}")
             return False
 
     def release(self):
-        if self.fd:
+        if self.fd is not None:
             try:
                 fcntl.flock(self.fd, fcntl.LOCK_UN)
                 os.close(self.fd)
                 os.remove(self.lock_file)
+                self.fd = None
             except Exception as e:
                 print(f"Error releasing lock for {self.iface}: {e}")
+
