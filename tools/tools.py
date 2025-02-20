@@ -161,7 +161,7 @@ class Tool:
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
+                tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}; sleep 30"'
                 self.logger.info(f"Creating new tmux window named: {window} for session named: {tool_name}")
 
                 subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
