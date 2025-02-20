@@ -98,26 +98,31 @@ class Hcxtool(Tool):
         scan_interface = self.get_scan_interface()
         cmd.extend(["-i", scan_interface])
 
-        output_prefix_val = self.scan_settings.get("output_prefix")
-        if output_prefix_val in (None, "", "none"):
-            self.logger.info("No output_prefix defined in configuration.")
-        elif output_prefix_val == "default":
-            default_prefix = self.results_dir / generate_default_prefix()
-            self.scan_settings["output_prefix"] = default_prefix
-            cmd.extend(["-w", str(default_prefix.with_suffix('.pcapng'))])
-        else:
-            output_prefix = output_prefix_val if isinstance(output_prefix_val, Path) else Path(output_prefix_val)
-            if not output_prefix.is_absolute():
-                output_prefix = self.results_dir / output_prefix
-            cmd.extend(["-w", str(output_prefix.with_suffix('.pcapng'))])
+        # setting up file prefixes
+        prefix = self.scan_settings.get("output_prefix")
+        try:
+            if prefix == "default" or  (None, "", "none"):
+                prefix = self.results_dir / generate_default_prefix()
+                self.scan_settings["output_prefix"] = prefix
+            else:
+                prefix = prefix if isinstance(prefix, Path) else Path(prefix)
+                if not prefix.is_absolute():
+                    prefix = self.results_dir / prefix
+        except Exception as e:
+            self.logger.error(f"Failed to generate output prefix for scan profile: {e}")
+            return []
 
+        # setting pcapng filepath
+        pcap_path = cmd.extend([f"-w", str(prefix.with_suffix('.pcapng'))])
+        self.logger.debug(f"setting pcapng filepath: {pcap_path}")
+
+        # setting gpsd filepath
         if self.scan_settings.get("gpsd", False):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
-            out_prefix = self.scan_settings.get("output_prefix")
-            out_prefix = out_prefix if isinstance(out_prefix, Path) else Path(out_prefix)
-            nmea_file = str(out_prefix.with_suffix('.nmea'))
-            cmd.append(f"--nmea_out={nmea_file}")
+            nmea_path = cmd.extend([f"--nmea_out=", str(prefix.with_suffix('.pcapng'))])
+            self.logger.debug(f"setting nmea filepath: {nmea_path}")
+
 
         if "channel" in self.scan_settings:
             channel_value = self.scan_settings["channel"]
@@ -146,18 +151,16 @@ class Hcxtool(Tool):
         for option, value in self.options.items():
             if isinstance(value, bool):
                 if value:
-                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.append(option)
-                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
             elif value is not None:
                 if option.startswith("--"):
-                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.append(f"{option}={value}")
-                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
                 else:
-                    self.logger.debug(f"Option {option} set to {value} \n updating command: {cmd}")
                     cmd.extend([option, str(value)])
-                    self.logger.debug(f"Option {option} set to {value} \n updated command: {cmd}")
+            # debug what options are added
+            self.logger.debug(f"appended {option}: {value}")
+
+
 
         self.logger.debug("Built command: " + " ".join(cmd))
         return cmd
