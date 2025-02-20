@@ -187,10 +187,10 @@ class Tool:
         while True:
             try:
                 # lists windows in the session, grep check window name
-                check_cmd = f"tmux list-windows -t {session} | grep -q '^{window_name} '"
-                result = subprocess.run(check_cmd, shell=True)
-                self.logger.debug(f"grep check result: {result}")
-                if result.returncode != 0:
+                check_cmd = f"tmux list-windows -F '#W' -t {session}"
+                result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+                window_list = result.stdout.splitlines()
+                if window_name not in window_list:
                     self.logger.info(f"Tmux window {tmux_window} has closed.")
                     break
             except Exception as e:
