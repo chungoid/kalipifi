@@ -5,6 +5,7 @@ import select
 import shlex
 import subprocess
 import time
+from logging import exception
 from pathlib import Path
 
 from utils.helper import load_interfaces_config
@@ -161,24 +162,20 @@ class Tool:
         """
         Runs a command inside a new tmux window attached to the tool's session and returns the window name.
         """
-
+        window = window_id
         if self.setup_tmux_session(tool_name):
-            tmux_window = f"{tool_name}:{window_id}"
-            tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}"'
-            self.logger.info(f"Creating new tmux window_id: {window_id}")
+            try:
+                window = f"{tool_name}:{window}"
+                tmux_cmd = f'tmux new-window -t {tool_name} -n {window} "{cmd_str}"'
+                self.logger.info(f"Creating new tmux window_id: {window}")
 
-            # Run the command and check for errors
-            result = subprocess.run(tmux_cmd, shell=True, capture_output=True, text=True)
+                # Run the command and check for errors
+                window = subprocess.run(tmux_cmd, shell=True, capture_output=True, text=True)
+            except Exception as e:
+                self.logger.critical(f"Failed to create new tmux window_id: {window} \n Error: {e}")
 
-            if result.returncode != 0:
-                self.logger.critical(f"Tmux command failed: {result.stderr}")
-                return None  # Prevent scan from running
 
-            return tmux_window  # Return window ID if successful
-
-        else:
-            self.logger.critical(f"Failed to create new tmux window for {tool_name} \n {cmd_str}")
-            return None
+        return window  # Return window ID if successful
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
