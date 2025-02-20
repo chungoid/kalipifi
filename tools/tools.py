@@ -112,22 +112,26 @@ class Tool:
             print(f"Interface {iface} is already in use.")
             return False
 
-    def setup_tmux_session(self, tool_name: str) -> bool:
+    def setup_tmux_session(self, tool_name: str):
         """
         Creates a named tmux session for the tool if not already running.
         Returns True if tmux session is enabled, False otherwise.
         """
-        if not self.settings.get("tmux", False):
-            self.logger.info(f"Tmux is disabled. Running {tool_name} in the normal shell.")
-            return False
 
         # Check if the tmux session exists; if not, create it
         check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
-        if subprocess.call(check_session_cmd, shell=True) != 0:
-            self.logger.info(f"Creating new tmux session for {tool_name}")
-            subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
+        try:
+            if subprocess.call(check_session_cmd, shell=True) != 0:
+                self.logger.info(f"Creating new tmux session for {tool_name}")
+                subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
+        except subprocess.CalledProcessError:
+            self.logger.critical(f"Failed to create new tmux session for {tool_name}")
+            return False
+        except Exception as e:
+            self.logger.critical(f"Failed to create new tmux session for {tool_name} \n Error: {e}")
+            return False
 
-        return True
+        return
 
     def run_in_shell(self, cmd: str):
         """
@@ -151,9 +155,6 @@ class Tool:
             tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd}"'
             self.logger.info(f"Executing in tmux: {tmux_cmd}")
             subprocess.Popen(tmux_cmd, shell=True)
-        else:
-            self.logger.info(f"Executing in normal shell: {cmd}")
-            subprocess.Popen(cmd, shell=True)
 
     def _monitor_process(self, process: subprocess.Popen, profile) -> None:
         """
