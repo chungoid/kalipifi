@@ -142,8 +142,6 @@ class Tool:
             self.logger.critical(f"Failed to create new tmux session for {tool_name} \n Error: {e}")
             return False
 
-        return
-
     def run_in_shell(self, cmd: str):
         """
         Runs a command directly in the shell (non-tmux mode).
@@ -179,8 +177,8 @@ class Tool:
 
     def _monitor_tmux_window(self, tmux_window: str, profile) -> None:
         """
-        Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1").
-        Waits until the window no longer exists, then cleans up.
+        Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1")
+        using grep to check for window existence, and cleans up when it closes.
         """
         self.logger.info(f"Monitoring tmux window: {tmux_window}")
         session = tmux_window.split(":")[0]
@@ -188,21 +186,17 @@ class Tool:
 
         while True:
             try:
-                # List window names using the '#W' format specifier
-                result = subprocess.run(
-                    f"tmux list-windows -F '#W' -t {session}",
-                    shell=True,
-                    capture_output=True,
-                    text=True
-                )
-                window_list = result.stdout.split()
-                if window_name not in window_list:
+                # lists windows in the session, grep check window name
+                check_cmd = f"tmux list-windows -t {session} | grep -q '^{window_name} '"
+                result = subprocess.run(check_cmd, shell=True)
+                if result.returncode != 0:
                     self.logger.info(f"Tmux window {tmux_window} has closed.")
                     break
             except Exception as e:
                 self.logger.error(f"Error monitoring tmux window: {e}")
                 break
-            time.sleep(2)  # Pause briefly to avoid excessive CPU usage
+
+            time.sleep(2)  # Avoid busy waiting
 
         self.release_interfaces()
         self.running_processes.pop(profile, None)
