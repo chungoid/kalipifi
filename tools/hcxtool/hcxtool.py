@@ -197,8 +197,13 @@ class Hcxtool(Tool):
                 return
 
         try:
-            cmd_str = self.cmd_to_string(self.build_command())  # FIXED: Correct function name
-            self.logger.debug(f"Built command: {cmd_str}")
+            cmd_list = self.build_command()
+            if cmd_list is None: # debug build_command()
+                self.logger.critical("Error: build_command() returned None.")
+                return
+
+            self.logger.debug(f"Raw command list before conversion: {cmd_list}") # debug tools/cmd_to_string()
+            cmd_str = self.cmd_to_string(cmd_list)
 
             if cmd_str:
                 if self.scan_settings.get("tmux", False):
@@ -217,7 +222,7 @@ class Hcxtool(Tool):
             self.release_interfaces()
             return
 
-            # Process Monitoring
+        # Process Monitoring
         if process:
             monitor_thread = threading.Thread(target=self._monitor_process, args=(process, profile), daemon=True)
             monitor_thread.start()
