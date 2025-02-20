@@ -51,6 +51,7 @@ class Tool:
         print(f"received command list: {cmd_list}")
         cmd_str = None
         try:
+
             cmd_str = shlex.join(cmd_list)
             print(f"converted to command string: {cmd_str}")
         except Exception as e:

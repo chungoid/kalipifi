@@ -120,9 +120,9 @@ class Hcxtool(Tool):
         if self.scan_settings.get("gpsd", False):
             cmd.append("--gpsd")
             cmd.append("--nmea_pcapng")
-            nmea_path = cmd.append([f"--nmea_out=", str(prefix.with_suffix('.nmea'))])
+            nmea_path = f"--nmea_out={prefix.with_suffix('.nmea')}"
+            cmd.append(nmea_path)
             self.logger.debug(f"setting nmea filepath: {nmea_path}")
-
 
         if "channel" in self.scan_settings:
             channel_value = self.scan_settings["channel"]
@@ -134,6 +134,7 @@ class Hcxtool(Tool):
                     channel_str = ",".join(channel_str.split())
             cmd.extend(["-c", channel_str])
 
+        # setting bpf filepath
         bpf_setting = self.scan_settings.get("bpf_file", "default")
         if bpf_setting in (None, "", "none"):
             self.logger.info("No BPF filter will be applied as per configuration.")
@@ -147,7 +148,7 @@ class Hcxtool(Tool):
             cmd.append(f"--bpf={bpf_file}")
             self.logger.debug(f"appended --bpf: {cmd}")
 
-
+        # set remaining options & checks defaults
         for option, value in self.options.items():
             if isinstance(value, bool):
                 if value:
@@ -159,8 +160,6 @@ class Hcxtool(Tool):
                     cmd.extend([option, str(value)])
             # debug what options are added
             self.logger.debug(f"appended {option}: {value}")
-
-
 
         self.logger.debug(f"finished building command.")
         return cmd
