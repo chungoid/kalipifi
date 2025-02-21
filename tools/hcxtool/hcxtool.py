@@ -45,46 +45,54 @@ class Hcxtool(Tool):
 
     def __init__(self, config_file: str = None):
         self.name = "hcxtool"
-
         base_dir = Path(__file__).resolve().parent
+
+        super().__init__(
+            name="hcxtool",
+            description="Enhanced hcxtool focused on headless RPi usage.",
+            base_dir=base_dir,
+            interfaces={},
+            settings={}
+        )
+
+        # If a config_file is provided but it's a relative path, join it with base_dir.
         if config_file is None:
-            config_file = base_dir / "configs" / "hcxtool.yaml"
+            config_file = base_dir / "configs/config.yaml"
         else:
             config_file = Path(config_file)
             if not config_file.is_absolute():
                 config_file = base_dir / config_file
 
-        if not config_file.exists():
-            self.logger.error(f"Configuration file {config_file} does not exist. Please create it.")
-            raise FileNotFoundError(f"{config_file} not found.")
+        full_config_path = config_file.resolve()
+        self.logger.debug(f"FULL CONFIG PATH: {full_config_path}")
 
-        try:
-            with config_file.open("r") as f:
-                self.config_data = yaml.safe_load(f)
-        except Exception as e:
-            self.logger.exception(f"Failed to load configuration file {config_file}: {e}")
-            raise
+        if not full_config_path.exists():
+            self.logger.critical(f"Config file NOT FOUND at {full_config_path}")
+            self.config_data = {}
+        else:
+            try:
+                with open(full_config_path, "r") as f:
+                    self.config_data = yaml.safe_load(f)
+                self.logger.debug(f"Successfully loaded config: {self.config_data}")
+            except Exception as e:
+                self.logger.critical(f"Failed to load config file: {e}")
+                self.config_data = {}
 
-        # Populates scan & interface Dicts from config/hcxtool.yaml
-        interfaces_config = self.config_data.get("interfaces", {})
-        scans_config = self.config_data.get("scans", {})
-        self.config_data["scans"] = scans_config
+        # **DEBUG: Print the raw config data before checking 'scans'**
+        self.logger.debug(f"RAW CONFIG DATA: {self.config_data}")
 
-        # Initialize scan_settings immediately from the config.
-        scan_settings = scans_config or {}
+        # Ensure scans section exists and is not empty
+        if "scans" not in self.config_data:
+            self.logger.critical("No 'scans' section found in config. Setting empty.")
+            self.config_data["scans"] = {}
 
-        super().__init__(
-            name="hcxtool",
-            description="Enhanced hcxtool focused on headless rpi usage.",
-            base_dir=base_dir,
-            interfaces=interfaces_config,
-            settings=scan_settings
-        )
+        self.scan_settings = self.config_data["scans"]
 
-        register_tool(self)
-        self.scan_settings = scan_settings
+        # **DEBUG: Print the extracted scans section**
+        self.logger.debug(f"Extracted scan profiles: {self.scan_settings}")
+
+        # Add default options to config.yaml options
         self.options = self.DEFAULT_OPTIONS.copy()
-        self.options.update(scan_settings.get("options", {}))
 
 
     def get_scan_interface(self) -> str:
@@ -356,7 +364,6 @@ class Hcxtool(Tool):
             return False
 
     def submenu(self):
-        scans = self.running_processes
         while True:
             print("\n=== Hcxtool Menu ===")
             print("1: Launch scan")
@@ -368,6 +375,8 @@ class Hcxtool(Tool):
             if choice == "0":
                 break
             elif choice == "1":
+                # Use the scans from the configuration rather than running_processes.
+                scans = self.config_data.get("scans", {})
                 if scans:
                     print("\n=== Hcxtool Scan Profiles ===")
                     for key, profile in scans.items():
@@ -379,14 +388,13 @@ class Hcxtool(Tool):
                         continue
                     selected_profile = int(selection)
                     if selected_profile not in scans:
-                        self.logger.error(f"invalid scan profile selection.")
+                        self.logger.error("Invalid scan profile selection.")
                         continue
                     try:
                         self.run(profile=selected_profile)
                         self.logger.info(f"Scan profile {selected_profile} launched asynchronously.")
                     except Exception as ex:
                         self.logger.exception("Error launching scan for profile %s: %s", selected_profile, ex)
-                        print("Error launching scan. See logs for details.")
                 else:
                     self.logger.error("No scan profiles defined in the configuration.")
             elif choice == "2":

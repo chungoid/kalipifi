@@ -100,7 +100,7 @@ class Tool:
 
     def load_interfaces(self):
         # Build the config file path based on the tool's name.
-        config_file = self.base_dir / "configs" / f"{self.name}.yaml"
+        config_file = self.base_dir / "configs" / f"config.yaml"
         if config_file.exists():
             config_data = load_interfaces_config(config_file)
             # Assume that the YAML file has an 'interfaces' key with subcategories.
