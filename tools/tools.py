@@ -172,31 +172,32 @@ class Tool:
             self.logger.error(f"Failed to execute command in shell: {e}")
             return None
 
+    import time
+
     def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
-        """
-        Creates a new detached tmux window in the given session, sends the scan command,
-        and then sends an additional keep-alive command.
-        """
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                # Create a new detached window in the existing session.
+                # Create a new detached window in the session.
                 create_window_cmd = f"tmux new-window -d -t {tool_name} -n {window_id}"
-                self.logger.info(f"Creating new detached tmux window with command: {create_window_cmd}")
+                self.logger.info(f"Creating new detached tmux window: {create_window_cmd}")
                 subprocess.run(create_window_cmd, shell=True, check=True)
 
-                # Send the scan command to the new window.
+                # Send the scan command.
                 send_cmd = f'tmux send-keys -t {window} "{cmd_str}" Enter'
-                self.logger.info(f"Sending scan command to tmux window: {window} with command: {send_cmd}")
+                self.logger.info(f"Sending scan command to tmux window {window}: {send_cmd}")
                 subprocess.run(send_cmd, shell=True, check=True)
 
-                # Send a keep-alive command to ensure the window stays open.
+                # Wait a few seconds before sending the keep-alive command.
+                time.sleep(5)
+
+                # Then send a keep-alive command.
                 keep_alive_cmd = f'tmux send-keys -t {window} "sleep 3600" Enter'
-                self.logger.info(f"Sending keep-alive command to tmux window: {window}")
+                self.logger.info(f"Sending keep-alive command to tmux window {window}: {keep_alive_cmd}")
                 subprocess.run(keep_alive_cmd, shell=True, check=True)
 
             except subprocess.CalledProcessError as e:
-                self.logger.critical(f"Failed to create or send commands to tmux window: {window}\nError: {e}")
+                self.logger.critical(f"Failed to create or send commands to tmux window {window}\nError: {e}")
                 return None
         return window
 
