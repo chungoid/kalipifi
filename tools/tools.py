@@ -13,6 +13,18 @@ from utils.helper import load_interfaces_config
 class Tool:
     def __init__(self, name, description, base_dir, interfaces=None, settings=None):
         self.name = name
+
+        self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(logging.DEBUG)
+        # Only add a handler if none exist yet.
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(f"[{self.name}] %(levelname)s: %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+        self.logger.propagate = False
+        self.logger.info(f"Initialized tool: {self.name}")
+
         self.description = description
         self.base_dir = Path(base_dir)
         self.interfaces = interfaces if interfaces else []
@@ -28,15 +40,6 @@ class Tool:
         self.results_dir = self.base_dir / "results"
         self.setup_directories()
 
-        # Setup logger
-        self.logger = logging.getLogger(self.name)
-        self.logger.setLevel(logging.DEBUG)  # Adjust log level as needed
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(f"[{self.name}] %(levelname)s: %(message)s")
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.info(f"Initialized tool: {self.name}")
-
 
     @staticmethod
     def _interface_exists(iface):
@@ -51,7 +54,6 @@ class Tool:
         print(f"received command list: {cmd_list}")
         cmd_str = None
         try:
-
             cmd_str = shlex.join(cmd_list)
             print(f"converted to command string: {cmd_str}")
         except Exception as e:
@@ -59,10 +61,16 @@ class Tool:
 
         return cmd_str
 
-
     @staticmethod
     def check_uid():
         return os.geteuid()
+
+    def menu(self):
+        return self.submenu()
+
+    def submenu(self):
+        logging.error("submenu not implemented")
+        pass
 
     def get_require_root(self):
         return bool(self.require_root)
@@ -100,17 +108,7 @@ class Tool:
         else:
             self.interfaces = {}
 
-    def validate_interfaces(self):
-        # Iterate over each interface in each category.
-        for category, iface_list in self.interfaces.items():
-            for iface_info in iface_list:
-                iface_name = iface_info.get("name") or iface_info.get("device")
-                if category == "wlan":
-                    # For wlan, check that the interface exists.
-                    if not self._interface_exists(iface_name):
-                        print(f"Error: {iface_name} does not exist.")
-                # Optionally add validations for bluetooth or gpsd if needed.
-        return True
+        self.check_interface_locks()
 
     def check_interface_locks(self, lock_dir="/var/lock"):
         """
@@ -250,7 +248,6 @@ class Tool:
         self.running_processes.pop(profile, None)
         self.logger.info(f"Released interface locks for profile '{profile}'.")
 
-
     def stop(self, profile) -> None:
         """
         Stop a running scan process for the given profile.
@@ -347,4 +344,8 @@ class InterfaceLock:
                 self.fd = None
             except Exception as e:
                 print(f"Error releasing lock for {self.iface}: {e}")
+
+
+
+
 

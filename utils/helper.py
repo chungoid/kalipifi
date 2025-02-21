@@ -1,12 +1,18 @@
 import os
+import re
+import select
 import subprocess
 import logging
+import sys
+import time
+
 import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from tools.tools import InterfaceLock
+from utils.tool_registry import tool_registry
+
 
 logger = logging.getLogger(__name__)
 logger.propagate = True
@@ -200,41 +206,27 @@ def load_interfaces_config(config_file: Path) -> Dict[str, Any]:
     with config_file.open("r") as f:
         return yaml.safe_load(f)
 
-
-def clear_stale_locks(lock_dir="/var/lock", interfaces=None):
-    """
-    Checks for stale lock files and removes them.
-
-    If 'interfaces' is provided as a list, only those interfaces are checked.
-    Otherwise, all files ending with '.lock' in lock_dir are examined.
-    """
-    if interfaces is None:
-        # Look for all .lock files in lock_dir.
+def cleanup_all_tools():
+    for tool in tool_registry:
         try:
-            lock_files = [f for f in os.listdir(lock_dir) if f.endswith(".lock")]
+            tool.cleanup()
         except Exception as e:
-            print(f"Error reading lock directory {lock_dir}: {e}")
-            return
+            logger.exception("Error cleaning up tool %s: %s", tool.name, e)
 
-        for lock_filename in lock_files:
-            iface = lock_filename[:-5]  # Remove the '.lock' suffix.
-            lock = InterfaceLock(iface, lock_dir)
-            if os.path.exists(lock.lock_file) and lock.is_stale():
-                try:
-                    os.remove(lock.lock_file)
-                    print(f"Removed stale lock for interface {iface}.")
-                except Exception as e:
-                    print(f"Failed to remove stale lock for interface {iface}: {e}")
-    else:
-        # Check only for the provided interfaces.
-        for iface in interfaces:
-            lock = InterfaceLock(iface, lock_dir)
-            if os.path.exists(lock.lock_file) and lock.is_stale():
-                try:
-                    os.remove(lock.lock_file)
-                    print(f"Removed stale lock for interface {iface}.")
-                except Exception as e:
-                    print(f"Failed to remove stale lock for interface {iface}: {e}")
+def flush_stdin(timeout=0.1):
+    """Flush any pending input from stdin."""
+    time.sleep(timeout)
+    while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        sys.stdin.read(1)
+
+
+class EscapeSequenceFilter(logging.Filter):
+    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+
+    def filter(self, record):
+        # Remove ANSI escape sequences from the message.
+        record.msg = self.ansi_escape.sub('', record.msg)
+        return True
 
 
 ''''''''''

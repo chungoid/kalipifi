@@ -4,11 +4,10 @@ import os
 import logging
 import argparse
 
+import utils.tool_registry
 from config.config import LOG_FILE, LOG_DIR
-from tools.hcxtool.hcxtool import Hcxtool
 from utils import helper
-from utils.toolmenus import display_main_menu, EscapeSequenceFilter, cleanup_all_tools
-
+from tools.hcxtool import hcxtool
 
 def setup_logging():
     # Ensure the log directory exists.
@@ -23,7 +22,7 @@ def setup_logging():
     ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
-    ch.addFilter(EscapeSequenceFilter())
+    #ch.addFilter(EscapeSequenceFilter())
     logger.addHandler(ch)
 
     # Add a FileHandler to log messages to the file specified in config.py.
@@ -40,7 +39,6 @@ def parse_args():
 
     return parser.parse_args()
 
-
 def main():
     setup_logging()
     logging.info("Starting kalipify.py")
@@ -51,7 +49,7 @@ def main():
         try:
             if os.getuid() != 0:
                 logging.info(f"Running as non-root, will limit functionality.")
-                display_main_menu()
+                utils.tool_registry.main_menu()
             elif os.getuid() == 0:
                 logging.warning("Running as root with --user option. "
                                 "Run without sudo if using --user option. Exiting...")
@@ -60,10 +58,10 @@ def main():
             logging.error(e)
     else:
         try:
-            helper.set_root()
+            utils.helper.set_root()
             if os.getuid() == 0:
                 logging.info(f"Running as Root: {bool(helper.check_root)}")
-                display_main_menu()
+                utils.tool_registry.main_menu()
             else:
                 if not args.user and os.getuid() != 0:
                     logging.error("Unable to set root. Please run with sudo if not using --user option.")
@@ -73,8 +71,7 @@ def main():
         except Exception as e:
             logging.error(f"Error: {e}")
 
-    cleanup_all_tools()
-
+    helper.cleanup_all_tools()
 
 if __name__ == "__main__":
     main()
