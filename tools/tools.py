@@ -173,22 +173,16 @@ class Tool:
             return None
 
     def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
-        """
-        Runs a command inside a new tmux window attached to the tool's session and returns the window name.
-        """
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "{cmd_str}; sleep 30"'
+                # Wrap the command in a bash -c call. 'exec bash' ensures the window remains open after the command finishes.
+                tmux_cmd = f'tmux new-window -t {tool_name} -n {window_id} "bash -c \'{cmd_str}; exec bash\'"'
                 self.logger.info(f"Creating new tmux window named: {window} for session named: {tool_name}")
-
-                subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                           text=True)
-
+                subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             except Exception as e:
                 self.logger.critical(f"Failed to create new tmux window: {window} \n Error: {e}")
                 return None
-
         return window
 
     def _monitor_tmux_window(self, tmux_window: str, profile) -> None:
