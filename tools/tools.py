@@ -176,16 +176,23 @@ class Tool:
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                default_shell = os.environ.get("SHELL", "/bin/zsh")
-                # Append sleep to keep the window alive.
-                tmux_cmd = (
-                    f'tmux new-window -t {tool_name} -n {window_id} '
-                    f'"{default_shell} -ic \'{cmd_str}; sleep 3600; exec {default_shell}\'"'
-                )
-                self.logger.info(f"Creating new tmux window named: {window} for session: {tool_name}")
-                subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            except Exception as e:
-                self.logger.critical(f"Failed to create new tmux window: {window} \n Error: {e}")
+                # Create a new tmux window with the desired name.
+                create_window_cmd = f"tmux new-window -t {tool_name} -n {window_id}"
+                self.logger.info(f"Creating new tmux window: {window}")
+                subprocess.run(create_window_cmd, shell=True, check=True)
+
+                # Send the command to that window.
+                send_cmd = f'tmux send-keys -t {window} "{cmd_str}" Enter'
+                self.logger.info(f"Sending command to tmux window: {window}")
+                subprocess.run(send_cmd, shell=True, check=True)
+
+                # Optionally, send a sleep command (or start an interactive shell) to keep the window alive.
+                keep_alive_cmd = f'tmux send-keys -t {window} "sleep 3600" Enter'
+                self.logger.info(f"Keeping tmux window alive with sleep command")
+                subprocess.run(keep_alive_cmd, shell=True, check=True)
+
+            except subprocess.CalledProcessError as e:
+                self.logger.critical(f"Failed to create or send commands to tmux window: {window}\nError: {e}")
                 return None
         return window
 
