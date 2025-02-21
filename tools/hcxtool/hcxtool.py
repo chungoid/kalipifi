@@ -1,5 +1,4 @@
 import base64
-import logging
 import threading
 import traceback
 import requests
@@ -71,11 +70,8 @@ class Hcxtool(Tool):
         scans_config = self.config_data.get("scans", {})
         self.config_data["scans"] = scans_config
 
-        # Initialize scan_settings to empty; it will be populated in run().
-        scan_settings = {}
-        self.options = self.DEFAULT_OPTIONS.copy()
-        self.options.update(scan_settings.get("options", {}))
-
+        # Initialize scan_settings immediately from the config.
+        scan_settings = scans_config or {}
 
         super().__init__(
             name="hcxtool",
@@ -87,6 +83,8 @@ class Hcxtool(Tool):
 
         register_tool(self)
         self.scan_settings = scan_settings
+        self.options = self.DEFAULT_OPTIONS.copy()
+        self.options.update(scan_settings.get("options", {}))
 
 
     def get_scan_interface(self) -> str:
