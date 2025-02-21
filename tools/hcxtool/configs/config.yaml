@@ -38,7 +38,7 @@ scans:
     gpsd: true
     auto_bpf: true
     bpf_file: default
-    tmux: false
+    tmux: true
     options:
       "--attemptapmax": 0
       "-F": true

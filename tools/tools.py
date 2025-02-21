@@ -172,8 +172,6 @@ class Tool:
             self.logger.error(f"Failed to execute command in shell: {e}")
             return None
 
-    import time
-
     def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
         """
         Creates (or uses) a detached tmux session with a window named window_id,
@@ -221,9 +219,7 @@ class Tool:
         Monitors a tmux window given its identifier (e.g., "hcxtool:wlan1").
         Waits until the window no longer exists, then cleans up.
         """
-        self.logger.info(f"Monitoring tmux window: {tmux_window}")
         session, window_name = tmux_window.split(":")
-
         while True:
             try:
                 # List window names using the '#W' format (one per line)
@@ -233,12 +229,9 @@ class Tool:
                     capture_output=True,
                     text=True
                 )
-                # Log the raw output for debugging
-                self.logger.debug(f"tmux list-windows output: {result.stdout!r}")
 
                 # Split and strip each line to remove extraneous whitespace
                 window_list = [w.strip() for w in result.stdout.splitlines()]
-                self.logger.debug(f"Window list for session {session}: {window_list}")
 
                 if window_name.strip() not in window_list:
                     self.logger.info(f"Tmux window {tmux_window} has closed.")
