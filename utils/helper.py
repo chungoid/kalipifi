@@ -228,7 +228,6 @@ class EscapeSequenceFilter(logging.Filter):
         record.msg = self.ansi_escape.sub('', record.msg)
         return True
 
-
 ''''''''''
 def run_command_with_root(cmd: list, prompt: bool = True, **kwargs) -> "subprocess.Popen":
 

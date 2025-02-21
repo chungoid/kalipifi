@@ -76,6 +76,5 @@ def main():
             logging.error(f"Error: {e}")
 
 
-
 if __name__ == "__main__":
     main()

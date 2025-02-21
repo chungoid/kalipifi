@@ -8,7 +8,7 @@ BASE_DIR = CONFIG_DIR.parent
 
 # Default Logging
 LOG_DIR = BASE_DIR / "logs"
-LOG_FILE = LOG_DIR / "kali-pifi.log"
+LOG_FILE = LOG_DIR / "kalipifi.log"
 
 
 

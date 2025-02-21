@@ -55,7 +55,7 @@ class Hcxtool(Tool):
             settings={}
         )
 
-        # If a config_file is provided but it's a relative path, join it with base_dir.
+        # If a config_file is provided ..but it's a relative path, join it with base_dir.
         if config_file is None:
             config_file = base_dir / "configs/config.yaml"
         else:

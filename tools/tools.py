@@ -362,8 +362,3 @@ class InterfaceLock:
                 self.fd = None
             except Exception as e:
                 print(f"Error releasing lock for {self.iface}: {e}")
-
-
-
-
-

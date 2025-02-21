@@ -20,12 +20,10 @@ class ToolRegistry:
         # Auto-detect tool-specific config path
         tool_config_path = f"tools/{tool_name.lower()}/configs/config.yaml"
 
-        # ✅ Only pass `config_file` if not already provided
         if "config_file" not in override_kwargs:
             override_kwargs["config_file"] = tool_config_path
 
         return tool_class(**override_kwargs)
-
 
     def __iter__(self):
         """Iterate over the registered tool classes."""
