@@ -176,12 +176,12 @@ class Tool:
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                # Properly escape quotes so that bash executes cmd_str and then keeps the window open.
+                # Use single quotes to wrap the command and then launch bash afterwards.
                 tmux_cmd = (
-                    f'tmux new-window -t {tool_name} -n {window_id} '
-                    f'"bash -c \\"{cmd_str}; exec bash\\""'
+                    f"tmux new-window -t {tool_name} -n {window_id} "
+                    f"'{cmd_str}; bash'"
                 )
-                self.logger.info(f"Creating new tmux window named: {window} for session named: {tool_name}")
+                self.logger.info(f"Creating new tmux window named: {window} for session: {tool_name}")
                 subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             except Exception as e:
                 self.logger.critical(f"Failed to create new tmux window: {window} \n Error: {e}")
