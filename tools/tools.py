@@ -144,19 +144,19 @@ class Tool:
         Creates a named tmux session for the tool if not already running.
         Returns True if tmux session is enabled, False otherwise.
         """
-
-        # Check if the tmux session exists; if not, create it
+        # Check if the tmux session exists; if not, create it in detached mode.
         check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
         try:
             if subprocess.call(check_session_cmd, shell=True) != 0:
-                self.logger.info(f"Creating new tmux session named: {tool_name}")
+                self.logger.info(f"Creating new detached tmux session named: {tool_name}")
                 subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
         except subprocess.CalledProcessError:
             self.logger.critical(f"Failed to create new tmux session named: {tool_name}")
             return False
         except Exception as e:
-            self.logger.critical(f"Failed to create new tmux session for {tool_name} \n Error: {e}")
+            self.logger.critical(f"Failed to create new tmux session for {tool_name}\nError: {e}")
             return False
+        return True
 
     def run_in_shell(self, cmd: str):
         """
@@ -173,22 +173,26 @@ class Tool:
             return None
 
     def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
+        """
+        Creates a new detached tmux window in the given session, sends the scan command,
+        and then sends an additional keep-alive command.
+        """
         window = f"{tool_name}:{window_id}"
         if self.setup_tmux_session(tool_name):
             try:
-                # Create a new tmux window with the desired name.
-                create_window_cmd = f"tmux new-window -t {tool_name} -n {window_id}"
-                self.logger.info(f"Creating new tmux window: {window}")
+                # Create a new detached window in the existing session.
+                create_window_cmd = f"tmux new-window -d -t {tool_name} -n {window_id}"
+                self.logger.info(f"Creating new detached tmux window with command: {create_window_cmd}")
                 subprocess.run(create_window_cmd, shell=True, check=True)
 
-                # Send the command to that window.
+                # Send the scan command to the new window.
                 send_cmd = f'tmux send-keys -t {window} "{cmd_str}" Enter'
-                self.logger.info(f"Sending command to tmux window: {window}")
+                self.logger.info(f"Sending scan command to tmux window: {window} with command: {send_cmd}")
                 subprocess.run(send_cmd, shell=True, check=True)
 
-                # Optionally, send a sleep command (or start an interactive shell) to keep the window alive.
+                # Send a keep-alive command to ensure the window stays open.
                 keep_alive_cmd = f'tmux send-keys -t {window} "sleep 3600" Enter'
-                self.logger.info(f"Keeping tmux window alive with sleep command")
+                self.logger.info(f"Sending keep-alive command to tmux window: {window}")
                 subprocess.run(keep_alive_cmd, shell=True, check=True)
 
             except subprocess.CalledProcessError as e:
