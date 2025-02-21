@@ -139,17 +139,17 @@ class Tool:
             print(f"Interface {iface} is already in use.")
             return False
 
-    def setup_tmux_session(self, tool_name: str):
+    def setup_tmux_session(self, tool_name: str, initial_window_name="wlan1"):
         """
         Creates a named tmux session for the tool if not already running.
         Returns True if tmux session is enabled, False otherwise.
         """
-        # Check if the tmux session exists; if not, create it in detached mode.
         check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
         try:
             if subprocess.call(check_session_cmd, shell=True) != 0:
-                self.logger.info(f"Creating new detached tmux session named: {tool_name}")
-                subprocess.call(f"tmux new-session -d -s {tool_name}", shell=True)
+                self.logger.info(
+                    f"Creating new detached tmux session named: {tool_name} with initial window: {initial_window_name}")
+                subprocess.call(f"tmux new-session -d -s {tool_name} -n {initial_window_name}", shell=True)
         except subprocess.CalledProcessError:
             self.logger.critical(f"Failed to create new tmux session named: {tool_name}")
             return False
