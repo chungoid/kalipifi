@@ -175,30 +175,45 @@ class Tool:
     import time
 
     def run_in_tmux(self, tool_name: str, window_id: str, cmd_str: str):
+        """
+        Creates (or uses) a detached tmux session with a window named window_id,
+        sends the scan command, and then sends a keep-alive command.
+        """
         window = f"{tool_name}:{window_id}"
-        if self.setup_tmux_session(tool_name):
-            try:
-                # Create a new detached window in the session.
+
+        # Check if the session exists.
+        check_session_cmd = f"tmux has-session -t {tool_name} 2>/dev/null"
+        session_exists = subprocess.call(check_session_cmd, shell=True) == 0
+
+        if not session_exists:
+            self.logger.info(f"Creating new detached tmux session named: {tool_name} with initial window: {window_id}")
+            create_session_cmd = f"tmux new-session -d -s {tool_name} -n {window_id}"
+            subprocess.run(create_session_cmd, shell=True, check=True)
+        else:
+            # List windows in the session.
+            list_windows_cmd = f"tmux list-windows -t {tool_name} -F '#W'"
+            output = subprocess.check_output(list_windows_cmd, shell=True, text=True)
+            windows = [line.strip() for line in output.splitlines()]
+            self.logger.debug(f"Current windows in session {tool_name}: {windows}")
+
+            # If our desired window doesn't exist, create it.
+            if window_id not in windows:
+                self.logger.info(f"Creating new detached tmux window named: {window_id} in session: {tool_name}")
                 create_window_cmd = f"tmux new-window -d -t {tool_name} -n {window_id}"
-                self.logger.info(f"Creating new detached tmux window: {create_window_cmd}")
                 subprocess.run(create_window_cmd, shell=True, check=True)
+            else:
+                self.logger.info(f"Using existing tmux window: {window}")
 
-                # Send the scan command.
-                send_cmd = f'tmux send-keys -t {window} "{cmd_str}" Enter'
-                self.logger.info(f"Sending scan command to tmux window {window}: {send_cmd}")
-                subprocess.run(send_cmd, shell=True, check=True)
+        # Now send the scan command to the designated window.
+        send_cmd = f'tmux send-keys -t {window} "{cmd_str}" Enter'
+        self.logger.info(f"Sending scan command to tmux window {window}: {send_cmd}")
+        subprocess.run(send_cmd, shell=True, check=True)
 
-                # Wait a few seconds before sending the keep-alive command.
-                time.sleep(5)
+        # Optionally, send a keep-alive command to prevent the window from closing.
+        keep_alive_cmd = f'tmux send-keys -t {window} "sleep 3600" Enter'
+        self.logger.info(f"Sending keep-alive command to tmux window {window}: {keep_alive_cmd}")
+        subprocess.run(keep_alive_cmd, shell=True, check=True)
 
-                # Then send a keep-alive command.
-                keep_alive_cmd = f'tmux send-keys -t {window} "sleep 3600" Enter'
-                self.logger.info(f"Sending keep-alive command to tmux window {window}: {keep_alive_cmd}")
-                subprocess.run(keep_alive_cmd, shell=True, check=True)
-
-            except subprocess.CalledProcessError as e:
-                self.logger.critical(f"Failed to create or send commands to tmux window {window}\nError: {e}")
-                return None
         return window
 
     def _monitor_tmux_window(self, tmux_window: str, profile) -> None:
