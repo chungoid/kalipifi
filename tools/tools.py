@@ -177,10 +177,10 @@ class Tool:
         if self.setup_tmux_session(tool_name):
             try:
                 default_shell = os.environ.get("SHELL", "/bin/zsh")
-                # Use the interactive (-i) flag and wrap the command appropriately.
+                # Append sleep to keep the window alive.
                 tmux_cmd = (
                     f'tmux new-window -t {tool_name} -n {window_id} '
-                    f'"{default_shell} -ic \'{cmd_str}; exec {default_shell}\'"'
+                    f'"{default_shell} -ic \'{cmd_str}; sleep 3600; exec {default_shell}\'"'
                 )
                 self.logger.info(f"Creating new tmux window named: {window} for session: {tool_name}")
                 subprocess.Popen(tmux_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
